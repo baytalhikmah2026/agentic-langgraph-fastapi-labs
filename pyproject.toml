@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "The AI Research Desk of Crescent Ledger Bank: agents with LangGraph behind FastAPI"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = [
+    "fastapi[standard]==0.162.4",
+    "pydantic==2.14.3",
+    "pydantic-settings==2.16.2",
+]
 
 [project.scripts]
 sovereign-brain = "sovereign_brain:main"
