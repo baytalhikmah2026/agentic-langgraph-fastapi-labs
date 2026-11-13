@@ -14,7 +14,12 @@ def rate_limit_key(request: Request) -> str:
     return f"user:{username}" if username else f"ip:{get_remote_address(request)}"
 
 
-limiter = Limiter(key_func=rate_limit_key, storage_uri=get_settings().rate_limit_storage_uri)
+# If the counter store (Redis, Lab 18) is unreachable, count in memory until it is back
+limiter = Limiter(
+    key_func=rate_limit_key,
+    storage_uri=get_settings().rate_limit_storage_uri,
+    in_memory_fallback_enabled=True,
+)
 
 
 @limiter.limit(get_settings().model_rate_limit)

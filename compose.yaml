@@ -14,10 +14,14 @@ services:
     environment:
       SB_OLLAMA_BASE_URL: http://ollama:11434
       SB_DATABASE_URL: postgresql+psycopg://sb:sb_local_pw@postgres:5432/sovereign_brain
+      SB_REDIS_URL: redis://redis:6379/0
+      SB_RATE_LIMIT_STORAGE_URI: redis://redis:6379/1
     depends_on:
       ollama:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
@@ -64,6 +68,19 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:8.10.3
+    container_name: sb-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   vllm:
     # Optional, NVIDIA GPU only: docker compose --profile gpu up -d vllm
     image: vllm/vllm-openai:v0.33.0
@@ -86,4 +103,5 @@ services:
 volumes:
   ollama-models:
   pg-data:
+  redis-data:
   hf-cache:

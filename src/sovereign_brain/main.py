@@ -5,10 +5,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sovereign_brain import __version__
 from sovereign_brain.api.v1 import auth, clients, health, research
+from sovereign_brain.core.cache import ResearchCache
 from sovereign_brain.core.errors import register_exception_handlers
 from sovereign_brain.core.logging import configure_logging
 from sovereign_brain.core.rate_limit import limiter
@@ -27,9 +29,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Starting %s %s (%s)", settings.app_name, __version__, settings.environment)
     engine = create_engine(settings)
     app.state.session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
+    app.state.cache = ResearchCache(redis_client, settings.cache_ttl_seconds)
     app.state.research_graph = build_hello_graph(get_chat_model(settings))
     logger.info("Research graph ready (model %s)", settings.llm_model)
     yield
+    await redis_client.aclose()
     await engine.dispose()
     logger.info("Shutting down %s", settings.app_name)
 

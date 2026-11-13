@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from langgraph.graph.state import CompiledStateGraph
 
+from sovereign_brain.core.cache import Cache
 from sovereign_brain.core.errors import MODEL_ERRORS
 from sovereign_brain.core.rate_limit import model_call_gate
 from sovereign_brain.core.request_id import get_request_id
@@ -64,15 +65,26 @@ def run_config() -> dict:
 
 
 @router.post("", dependencies=[Depends(model_call_gate)])
-async def submit_research(checked: Checked, graph: ResearchGraph) -> ResearchResponse:
-    logger.info("Research started for %s", checked.body.client_id)
-    result = await graph.ainvoke(checked.graph_input, config=run_config())
-    logger.info("Research finished for %s", checked.body.client_id)
+async def submit_research(
+    checked: Checked, graph: ResearchGraph, cache: Cache
+) -> ResearchResponse:
+    client_id, question = checked.body.client_id, checked.body.question
+    summary = await cache.get(client_id, question)
+    cached = summary is not None
+    if cached:
+        logger.info("Research for %s answered from the cache", client_id)
+    else:
+        logger.info("Research started for %s", client_id)
+        result = await graph.ainvoke(checked.graph_input, config=run_config())
+        summary = result["answer"]
+        await cache.set(client_id, question, summary)
+        logger.info("Research finished for %s", client_id)
     return ResearchResponse(
         request_id=get_request_id(),
-        client_id=checked.body.client_id,
+        client_id=client_id,
         status="completed",
-        summary=result["answer"],
+        summary=summary,
+        cached=cached,
         created_at=datetime.now(UTC),
     )
 

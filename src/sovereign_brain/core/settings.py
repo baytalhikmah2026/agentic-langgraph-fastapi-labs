@@ -33,9 +33,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 30
 
-    # Rate limits for model calls (Lab 17), per signed-in analyst
+    # Rate limits for model calls (Lab 17), per signed-in analyst; Redis storage from Lab 18
     model_rate_limit: str = "5/minute"
     rate_limit_storage_uri: str = "memory://"
+
+    # Redis cache for research answers (Lab 18)
+    redis_url: str = "redis://localhost:6379/0"
+    cache_ttl_seconds: int = 600
 
 
 @lru_cache

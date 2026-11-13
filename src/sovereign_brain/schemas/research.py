@@ -29,4 +29,5 @@ class ResearchResponse(BaseModel):
     client_id: str
     status: Literal["accepted", "completed"]
     summary: str | None = None
+    cached: bool = False
     created_at: datetime
