@@ -19,6 +19,7 @@ SYSTEM_PROMPT = (
 
 class HelloState(TypedDict, total=False):
     client_id: str
+    client_profile: str
     question: str
     brief: str
     answer: str
@@ -26,7 +27,9 @@ class HelloState(TypedDict, total=False):
 
 def prepare_brief(state: HelloState) -> dict:
     """A plain Python step: no AI, just a clean, predictable brief."""
-    return {"brief": f"Client {state['client_id']}: {state['question']}"}
+    profile = state.get("client_profile")
+    client = f"Client {state['client_id']}" + (f" ({profile})" if profile else "")
+    return {"brief": f"{client}: {state['question']}"}
 
 
 def build_hello_graph(model: BaseChatModel) -> CompiledStateGraph:

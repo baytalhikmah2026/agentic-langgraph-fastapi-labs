@@ -11,8 +11,10 @@ dependencies = [
     "langchain-ollama==1.1.0",
     "langchain-openai==1.7.4",
     "langgraph==1.2.20",
+    "psycopg[binary,pool]==3.3.8",
     "pydantic==2.14.3",
     "pydantic-settings==2.16.2",
+    "sqlalchemy[asyncio]==2.1.8",
 ]
 
 [project.scripts]
