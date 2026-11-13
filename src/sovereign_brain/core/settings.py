@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 30
 
+    # Rate limits for model calls (Lab 17), per signed-in analyst
+    model_rate_limit: str = "5/minute"
+    rate_limit_storage_uri: str = "memory://"
+
 
 @lru_cache
 def get_settings() -> Settings:

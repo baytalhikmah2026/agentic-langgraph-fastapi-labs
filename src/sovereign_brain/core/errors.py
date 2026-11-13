@@ -10,6 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from langgraph.errors import GraphRecursionError
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -72,6 +73,15 @@ async def agent_loop_limit(request: Request, exc: GraphRecursionError) -> JSONRe
     )
 
 
+async def rate_limited(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    logger.warning("Rate limit reached: %s", exc.detail)
+    return error_response(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        "rate_limited",
+        f"Too many model requests. The limit is {exc.detail}; please wait and try again.",
+    )
+
+
 async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Unexpected error on %s %s", request.method, request.url.path)
     return error_response(500, "internal_error", "Something went wrong on our side.")
@@ -84,4 +94,5 @@ def register_exception_handlers(app: FastAPI) -> None:
         app.add_exception_handler(error, model_unavailable)
     app.add_exception_handler(OperationalError, database_unavailable)
     app.add_exception_handler(GraphRecursionError, agent_loop_limit)
+    app.add_exception_handler(RateLimitExceeded, rate_limited)
     app.add_exception_handler(Exception, unexpected_error)

@@ -11,6 +11,7 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from langgraph.graph.state import CompiledStateGraph
 
 from sovereign_brain.core.errors import MODEL_ERRORS
+from sovereign_brain.core.rate_limit import model_call_gate
 from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.security import get_current_user
 from sovereign_brain.core.settings import get_settings
@@ -62,7 +63,7 @@ def run_config() -> dict:
     }
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(model_call_gate)])
 async def submit_research(checked: Checked, graph: ResearchGraph) -> ResearchResponse:
     logger.info("Research started for %s", checked.body.client_id)
     result = await graph.ainvoke(checked.graph_input, config=run_config())
@@ -76,7 +77,9 @@ async def submit_research(checked: Checked, graph: ResearchGraph) -> ResearchRes
     )
 
 
-@router.post("/stream", response_class=EventSourceResponse)
+@router.post(
+    "/stream", response_class=EventSourceResponse, dependencies=[Depends(model_call_gate)]
+)
 async def stream_research(
     checked: Checked, graph: ResearchGraph
 ) -> AsyncIterator[ServerSentEvent]:
