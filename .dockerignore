@@ -1,0 +1,9 @@
+# Never copy these into an image
+.env
+.git
+.venv
+**/__pycache__
+.pytest_cache
+.ruff_cache
+data/*.sqlite
+reports
