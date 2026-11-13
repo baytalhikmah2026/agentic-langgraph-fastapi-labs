@@ -51,8 +51,8 @@ def test_unexpected_error_hides_the_details() -> None:
     response = post_with_failing_graph(RuntimeError("secret internal detail"))
 
     assert response.status_code == 500
-    assert response.json() == {
-        "error": "internal_error",
-        "message": "Something went wrong on our side.",
-        "details": None,
-    }
+    body = response.json()
+    assert body["error"] == "internal_error"
+    assert body["message"] == "Something went wrong on our side."
+    assert "secret" not in response.text
+    assert len(body["request_id"]) == 32

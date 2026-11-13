@@ -11,6 +11,7 @@ from sovereign_brain import __version__
 from sovereign_brain.api.v1 import clients, health, research
 from sovereign_brain.core.errors import register_exception_handlers
 from sovereign_brain.core.logging import configure_logging
+from sovereign_brain.core.request_id import RequestIdMiddleware
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
 from sovereign_brain.graphs.hello import build_hello_graph
@@ -37,6 +38,7 @@ def create_app() -> FastAPI:
     configure_logging(settings.log_level)
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=lifespan)
     register_exception_handlers(app)
+    app.add_middleware(RequestIdMiddleware)
     app.include_router(health.router)
     app.include_router(research.router)
     app.include_router(clients.router)

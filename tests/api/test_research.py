@@ -68,4 +68,5 @@ def test_research_for_an_unknown_client_is_404() -> None:
         "error": "not_found",
         "message": "Client C-9999 not found",
         "details": None,
+        "request_id": response.headers["X-Request-ID"],
     }

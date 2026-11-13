@@ -13,6 +13,7 @@ from langgraph.errors import GraphRecursionError
 from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.schemas.error import ErrorResponse
 
 logger = logging.getLogger("sovereign_brain.errors")
@@ -22,7 +23,9 @@ MODEL_ERRORS = (ConnectionError, ollama.ResponseError, openai.APIConnectionError
 
 
 def error_response(status_code: int, error: str, message: str, details=None) -> JSONResponse:
-    body = ErrorResponse(error=error, message=message, details=details)
+    body = ErrorResponse(
+        error=error, message=message, details=details, request_id=get_request_id()
+    )
     return JSONResponse(status_code=status_code, content=jsonable_encoder(body))
 
 

@@ -9,3 +9,4 @@ class ErrorResponse(BaseModel):
     error: str
     message: str
     details: list[dict[str, Any]] | None = None
+    request_id: str | None = None
