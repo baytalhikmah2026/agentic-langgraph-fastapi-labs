@@ -51,8 +51,9 @@ def test_research_rejects_a_bad_request() -> None:
         response = client.post("/v1/research", json={"client_id": "X-1", "question": "short"})
 
     assert response.status_code == 422
-    fields = [error["loc"][-1] for error in response.json()["detail"]]
-    assert fields == ["client_id", "question"]
+    assert response.json()["error"] == "invalid_request"
+    fields = [detail["field"] for detail in response.json()["details"]]
+    assert fields == ["body.client_id", "body.question"]
 
 
 def test_research_for_an_unknown_client_is_404() -> None:
@@ -63,4 +64,8 @@ def test_research_for_an_unknown_client_is_404() -> None:
         )
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Client C-9999 not found"}
+    assert response.json() == {
+        "error": "not_found",
+        "message": "Client C-9999 not found",
+        "details": None,
+    }

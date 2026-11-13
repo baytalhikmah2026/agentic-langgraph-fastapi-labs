@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     openai_base_url: str = "http://localhost:11434/v1"
     openai_api_key: SecretStr = SecretStr("not-needed")
 
+    # Agent safety (Lab 13): the most steps one graph run may take
+    graph_recursion_limit: int = 25
+
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"
 

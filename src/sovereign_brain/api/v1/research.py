@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from langgraph.graph.state import CompiledStateGraph
 
+from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse
 
@@ -30,7 +31,8 @@ async def submit_research(
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Client {body.client_id} not found")
     profile = f"{client.name}, {client.segment}, risk profile {client.risk_profile}"
     result = await graph.ainvoke(
-        {"client_id": body.client_id, "client_profile": profile, "question": body.question}
+        {"client_id": body.client_id, "client_profile": profile, "question": body.question},
+        config={"recursion_limit": get_settings().graph_recursion_limit},
     )
     return ResearchResponse(
         request_id=uuid4().hex,
