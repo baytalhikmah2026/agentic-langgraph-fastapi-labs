@@ -44,5 +44,25 @@ services:
       timeout: 5s
       retries: 10
 
+  vllm:
+    # Optional, NVIDIA GPU only: docker compose --profile gpu up -d vllm
+    image: vllm/vllm-openai:v0.33.0
+    container_name: sb-vllm
+    profiles: ["gpu"]
+    command: ["--model", "Qwen/Qwen3-4B", "--max-model-len", "8192"]
+    ports:
+      - "8001:8000"
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
 volumes:
   ollama-models:
+  hf-cache:

@@ -3,6 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,10 +14,13 @@ class Settings(BaseSettings):
     environment: Literal["local", "test", "production"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
-    # The AI model (Lab 6)
+    # The AI model (Lab 6) and the OpenAI-compatible path (Lab 7)
+    llm_provider: Literal["ollama", "openai"] = "ollama"
     llm_model: str = "qwen3:4b"
     llm_temperature: float = 0.0
     ollama_base_url: str = "http://localhost:11434"
+    openai_base_url: str = "http://localhost:11434/v1"
+    openai_api_key: SecretStr = SecretStr("not-needed")
 
 
 @lru_cache
