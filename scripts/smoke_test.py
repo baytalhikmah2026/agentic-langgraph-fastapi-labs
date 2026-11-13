@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import httpx
+from auth_helper import login
 
 from sovereign_brain.core.settings import get_settings
 
@@ -18,7 +19,7 @@ def check(name: str, ok: bool, detail: str) -> bool:
     return ok
 
 
-def run_checks(client: httpx.Client) -> list[bool]:
+def run_checks(client: httpx.Client, username: str) -> list[bool]:
     results = []
     health = client.get(f"{API}/health")
     results.append(check("API health", health.status_code == 200, health.text))
@@ -29,8 +30,10 @@ def run_checks(client: httpx.Client) -> list[bool]:
     detail = f"missing {', '.join(sorted(missing))}" if missing else ", ".join(sorted(required))
     results.append(check("Ollama models", not missing, detail))
 
+    token = login(API, username)
     payload = json.loads(REQUEST_FILE.read_text(encoding="utf-8"))
-    research = client.post(f"{API}/v1/research", json=payload)
+    headers = {"Authorization": f"Bearer {token}"}
+    research = client.post(f"{API}/v1/research", json=payload, headers=headers)
     is_json = research.headers.get("content-type", "").startswith("application/json")
     body = research.json() if is_json else {"detail": research.text}
     completed = body.get("status") == "completed" and bool(body.get("summary"))
@@ -41,9 +44,10 @@ def run_checks(client: httpx.Client) -> list[bool]:
 
 
 def main() -> int:
+    username = sys.argv[1] if len(sys.argv) > 1 else "amina"
     try:
         with httpx.Client(timeout=180) as client:
-            results = run_checks(client)
+            results = run_checks(client, username)
     except httpx.HTTPError as error:
         print(f"[FAIL] Connection: {error!r}. Is the stack running? (docker compose up -d)")
         return 1

@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sovereign_brain import __version__
-from sovereign_brain.api.v1 import clients, health, research
+from sovereign_brain.api.v1 import auth, clients, health, research
 from sovereign_brain.core.errors import register_exception_handlers
 from sovereign_brain.core.logging import configure_logging
 from sovereign_brain.core.request_id import RequestIdMiddleware
@@ -40,6 +40,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.add_middleware(RequestIdMiddleware)
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(research.router)
     app.include_router(clients.router)
     return app

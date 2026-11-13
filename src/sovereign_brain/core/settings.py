@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"
 
+    # Sign-in tokens (Lab 16): set SB_JWT_SECRET in .env to your own long random value
+    jwt_secret: SecretStr = SecretStr("local-development-only-secret-change-me-0123")
+    jwt_algorithm: str = "HS256"
+    access_token_minutes: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:

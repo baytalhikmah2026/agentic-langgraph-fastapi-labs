@@ -3,11 +3,13 @@ from fastapi.testclient import TestClient
 from langgraph.errors import GraphRecursionError
 
 from sovereign_brain.api.v1.research import get_research_graph
-from sovereign_brain.db.models import Client
+from sovereign_brain.core.security import get_current_user
+from sovereign_brain.db.models import Client, User
 from sovereign_brain.db.repository import ClientRepository
 from sovereign_brain.main import create_app
 
 REQUEST = {"client_id": "C-1042", "question": "Summarise the exposure to energy stocks."}
+TEST_ANALYST = User(username="test.analyst", full_name="Test Analyst", role="analyst")
 
 
 class FakeClients:
@@ -29,6 +31,7 @@ def post_with_failing_graph(error: Exception) -> httpx.Response:
     app = create_app()
     app.dependency_overrides[get_research_graph] = lambda: FailingGraph(error)
     app.dependency_overrides[ClientRepository] = FakeClients
+    app.dependency_overrides[get_current_user] = lambda: TEST_ANALYST
     with TestClient(app, raise_server_exceptions=False) as client:
         return client.post("/v1/research", json=REQUEST)
 

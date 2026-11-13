@@ -1,11 +1,14 @@
 """Client look-up: the bank's client register."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from sovereign_brain.core.security import get_current_user
 from sovereign_brain.db.repository import Clients
 from sovereign_brain.schemas.client import ClientOut
 
-router = APIRouter(prefix="/v1/clients", tags=["clients"])
+router = APIRouter(
+    prefix="/v1/clients", tags=["clients"], dependencies=[Depends(get_current_user)]
+)
 
 
 @router.get("/{client_id}")

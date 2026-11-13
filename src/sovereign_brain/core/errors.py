@@ -22,17 +22,19 @@ logger = logging.getLogger("sovereign_brain.errors")
 MODEL_ERRORS = (ConnectionError, ollama.ResponseError, openai.APIConnectionError, httpx.HTTPError)
 
 
-def error_response(status_code: int, error: str, message: str, details=None) -> JSONResponse:
+def error_response(
+    status_code: int, error: str, message: str, details=None, headers=None
+) -> JSONResponse:
     body = ErrorResponse(
         error=error, message=message, details=details, request_id=get_request_id()
     )
-    return JSONResponse(status_code=status_code, content=jsonable_encoder(body))
+    return JSONResponse(status_code=status_code, content=jsonable_encoder(body), headers=headers)
 
 
 async def http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    names = {404: "not_found", 405: "method_not_allowed"}
+    names = {401: "unauthorized", 403: "forbidden", 404: "not_found", 405: "method_not_allowed"}
     error = names.get(exc.status_code, "http_error")
-    return error_response(exc.status_code, error, str(exc.detail))
+    return error_response(exc.status_code, error, str(exc.detail), headers=exc.headers)
 
 
 async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:

@@ -12,11 +12,14 @@ from langgraph.graph.state import CompiledStateGraph
 
 from sovereign_brain.core.errors import MODEL_ERRORS
 from sovereign_brain.core.request_id import get_request_id
+from sovereign_brain.core.security import get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse
 
-router = APIRouter(prefix="/v1/research", tags=["research"])
+router = APIRouter(
+    prefix="/v1/research", tags=["research"], dependencies=[Depends(get_current_user)]
+)
 logger = logging.getLogger("sovereign_brain.research")
 
 

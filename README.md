@@ -18,7 +18,9 @@ You need Git, Docker and uv (see Lab 1).
     docker compose up -d --build              # API (port 8000) + Ollama (port 11434)
     docker compose exec ollama ollama pull qwen3:4b
     docker compose exec ollama ollama pull nomic-embed-text:v1.5
-    uv run python scripts/smoke_test.py       # end-to-end check
+    uv run python scripts/seed_db.py          # tables + sample clients
+    uv run python scripts/create_user.py amina --full-name "Amina Rahman"
+    uv run python scripts/smoke_test.py amina # end-to-end check (asks for the password)
     uv run pytest                             # automatic tests (no model needed)
     docker compose down                       # stop everything
 

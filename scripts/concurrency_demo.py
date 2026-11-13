@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import httpx
+from auth_helper import login
 
 API = "http://127.0.0.1:8000"
 PAYLOAD = json.loads(Path("requests/research_ok.json").read_text(encoding="utf-8"))
@@ -21,8 +22,9 @@ async def timed(client: httpx.AsyncClient, name: str, method: str, path: str) ->
     print(f"{seconds:6.2f}s  {name:<11} {response.status_code}")
 
 
-async def main() -> None:
-    async with httpx.AsyncClient(timeout=300) as client:
+async def main(token: str) -> None:
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=300, headers=headers) as client:
         start = time.perf_counter()
         await asyncio.gather(
             *(timed(client, f"research {n}", "POST", "/v1/research") for n in (1, 2, 3)),
@@ -32,4 +34,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main(login(API, "amina")))
