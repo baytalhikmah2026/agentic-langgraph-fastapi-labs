@@ -10,6 +10,8 @@ from sovereign_brain import __version__
 from sovereign_brain.api.v1 import health, research
 from sovereign_brain.core.logging import configure_logging
 from sovereign_brain.core.settings import get_settings
+from sovereign_brain.graphs.hello import build_hello_graph
+from sovereign_brain.llm.factory import get_chat_model
 
 logger = logging.getLogger("sovereign_brain")
 
@@ -18,6 +20,8 @@ logger = logging.getLogger("sovereign_brain")
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     logger.info("Starting %s %s (%s)", settings.app_name, __version__, settings.environment)
+    app.state.research_graph = build_hello_graph(get_chat_model(settings))
+    logger.info("Research graph ready (model %s)", settings.llm_model)
     yield
     logger.info("Shutting down %s", settings.app_name)
 
