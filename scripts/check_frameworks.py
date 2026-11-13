@@ -32,7 +32,8 @@ def main() -> None:
 
     settings = get_settings()
     model = get_chat_model(settings)
-    print(f"chat model:       {type(model).__name__} '{settings.llm_model}' at {settings.ollama_base_url}")
+    name = type(model).__name__
+    print(f"chat model:       {name} '{settings.llm_model}' at {settings.ollama_base_url}")
 
 
 if __name__ == "__main__":
