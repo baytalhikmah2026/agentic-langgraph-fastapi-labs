@@ -1,12 +1,16 @@
 """Research requests: the main counter of the Research Desk."""
 
 import logging
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from langgraph.graph.state import CompiledStateGraph
 
+from sovereign_brain.core.errors import MODEL_ERRORS
 from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
@@ -24,28 +28,73 @@ def get_research_graph(request: Request) -> CompiledStateGraph:
 ResearchGraph = Annotated[CompiledStateGraph, Depends(get_research_graph)]
 
 
-@router.post("")
-async def submit_research(
-    body: ResearchRequest, graph: ResearchGraph, clients: Clients
-) -> ResearchResponse:
+@dataclass
+class CheckedRequest:
+    """A valid research request for a client that exists, ready for the graph."""
+
+    body: ResearchRequest
+    graph_input: dict
+
+
+async def check_request(body: ResearchRequest, clients: Clients) -> CheckedRequest:
     client = await clients.get(body.client_id)
     if client is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Client {body.client_id} not found")
     profile = f"{client.name}, {client.segment}, risk profile {client.risk_profile}"
-    request_id = get_request_id()
-    logger.info("Research started for %s", body.client_id)
-    result = await graph.ainvoke(
-        {"client_id": body.client_id, "client_profile": profile, "question": body.question},
-        config={
-            "recursion_limit": get_settings().graph_recursion_limit,
-            "metadata": {"request_id": request_id},
-        },
-    )
-    logger.info("Research finished for %s", body.client_id)
+    graph_input = {
+        "client_id": body.client_id,
+        "client_profile": profile,
+        "question": body.question,
+    }
+    return CheckedRequest(body=body, graph_input=graph_input)
+
+
+Checked = Annotated[CheckedRequest, Depends(check_request)]
+
+
+def run_config() -> dict:
+    return {
+        "recursion_limit": get_settings().graph_recursion_limit,
+        "metadata": {"request_id": get_request_id()},
+    }
+
+
+@router.post("")
+async def submit_research(checked: Checked, graph: ResearchGraph) -> ResearchResponse:
+    logger.info("Research started for %s", checked.body.client_id)
+    result = await graph.ainvoke(checked.graph_input, config=run_config())
+    logger.info("Research finished for %s", checked.body.client_id)
     return ResearchResponse(
-        request_id=request_id,
-        client_id=body.client_id,
+        request_id=get_request_id(),
+        client_id=checked.body.client_id,
         status="completed",
         summary=result["answer"],
         created_at=datetime.now(UTC),
     )
+
+
+@router.post("/stream", response_class=EventSourceResponse)
+async def stream_research(
+    checked: Checked, graph: ResearchGraph
+) -> AsyncIterator[ServerSentEvent]:
+    """The same research, streamed as Server-Sent Events while the model writes."""
+    request_id = get_request_id()
+    yield ServerSentEvent(
+        event="start", data={"request_id": request_id, "client_id": checked.body.client_id}
+    )
+    try:
+        async for mode, payload in graph.astream(
+            checked.graph_input, config=run_config(), stream_mode=["updates", "messages"]
+        ):
+            if mode == "messages":
+                chunk, _metadata = payload
+                if chunk.content:
+                    yield ServerSentEvent(event="token", data=chunk.content)
+            else:
+                for node in payload:
+                    yield ServerSentEvent(event="node", data={"node": node})
+    except MODEL_ERRORS as error:
+        logger.error("AI model not available during stream: %r", error)
+        yield ServerSentEvent(event="error", data={"error": "model_unavailable"})
+        return
+    yield ServerSentEvent(event="done", data={"request_id": request_id})
