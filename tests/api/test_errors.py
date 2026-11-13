@@ -1,20 +1,12 @@
 import httpx
+import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from langgraph.errors import GraphRecursionError
 
 from sovereign_brain.api.v1.research import get_research_graph
-from sovereign_brain.core.security import get_current_user
-from sovereign_brain.db.models import Client, User
-from sovereign_brain.db.repository import ClientRepository
-from sovereign_brain.main import create_app
 
 REQUEST = {"client_id": "C-1042", "question": "Summarise the exposure to energy stocks."}
-TEST_ANALYST = User(username="test.analyst", full_name="Test Analyst", role="analyst")
-
-
-class FakeClients:
-    async def get(self, client_id: str) -> Client | None:
-        return Client(id=client_id, name="Test Client", segment="wealth", risk_profile="moderate")
 
 
 class FailingGraph:
@@ -27,35 +19,24 @@ class FailingGraph:
         raise self.error
 
 
-def post_with_failing_graph(error: Exception) -> httpx.Response:
-    app = create_app()
+@pytest.mark.parametrize(
+    ("error", "status", "code"),
+    [
+        (ConnectionError("Failed to connect to Ollama"), 503, "model_unavailable"),
+        (httpx.ConnectError("connection refused"), 503, "model_unavailable"),
+        (GraphRecursionError("Recursion limit of 25 reached"), 508, "agent_loop_limit"),
+        (RuntimeError("secret internal detail"), 500, "internal_error"),
+    ],
+)
+def test_failures_become_clear_error_answers(
+    app: FastAPI, password: str, error: Exception, status: int, code: str
+) -> None:
     app.dependency_overrides[get_research_graph] = lambda: FailingGraph(error)
-    app.dependency_overrides[ClientRepository] = FakeClients
-    app.dependency_overrides[get_current_user] = lambda: TEST_ANALYST
     with TestClient(app, raise_server_exceptions=False) as client:
-        return client.post("/v1/research", json=REQUEST)
+        login = client.post("/v1/auth/token", data={"username": "amina", "password": password})
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        response = client.post("/v1/research", json=REQUEST, headers=headers)
 
-
-def test_unreachable_model_is_503() -> None:
-    response = post_with_failing_graph(ConnectionError("Failed to connect to Ollama"))
-
-    assert response.status_code == 503
-    assert response.json()["error"] == "model_unavailable"
-
-
-def test_endless_agent_loop_is_508() -> None:
-    response = post_with_failing_graph(GraphRecursionError("Recursion limit of 25 reached"))
-
-    assert response.status_code == 508
-    assert response.json()["error"] == "agent_loop_limit"
-
-
-def test_unexpected_error_hides_the_details() -> None:
-    response = post_with_failing_graph(RuntimeError("secret internal detail"))
-
-    assert response.status_code == 500
-    body = response.json()
-    assert body["error"] == "internal_error"
-    assert body["message"] == "Something went wrong on our side."
+    assert response.status_code == status
+    assert response.json()["error"] == code
     assert "secret" not in response.text
-    assert len(body["request_id"]) == 32

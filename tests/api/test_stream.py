@@ -1,26 +1,8 @@
 import json
 
 from fastapi.testclient import TestClient
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
 
-from sovereign_brain.api.v1.research import get_research_graph
-from sovereign_brain.core.security import get_current_user
-from sovereign_brain.db.models import Client, User
-from sovereign_brain.db.repository import ClientRepository
-from sovereign_brain.graphs.hello import build_hello_graph
-from sovereign_brain.main import create_app
-
-FAKE_ANSWER = "Energy stocks are 12% of the portfolio."
 REQUEST = {"client_id": "C-1042", "question": "Summarise the exposure to energy stocks."}
-TEST_ANALYST = User(username="test.analyst", full_name="Test Analyst", role="analyst")
-
-
-class FakeClients:
-    async def get(self, client_id: str) -> Client | None:
-        if client_id != "C-1042":
-            return None
-        return Client(id=client_id, name="Test Client", segment="wealth", risk_profile="moderate")
 
 
 def read_events(text: str) -> list[tuple[str, object]]:
@@ -33,18 +15,10 @@ def read_events(text: str) -> list[tuple[str, object]]:
     return events
 
 
-def make_client() -> TestClient:
-    app = create_app()
-    graph = build_hello_graph(GenericFakeChatModel(messages=iter([AIMessage(FAKE_ANSWER)])))
-    app.dependency_overrides[get_research_graph] = lambda: graph
-    app.dependency_overrides[ClientRepository] = FakeClients
-    app.dependency_overrides[get_current_user] = lambda: TEST_ANALYST
-    return TestClient(app)
-
-
-def test_stream_sends_start_nodes_tokens_and_done() -> None:
-    with make_client() as client:
-        response = client.post("/v1/research/stream", json=REQUEST)
+def test_stream_sends_start_nodes_tokens_and_done(
+    client: TestClient, auth_headers: dict[str, str], fake_answer: str
+) -> None:
+    response = client.post("/v1/research/stream", json=REQUEST, headers=auth_headers)
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
@@ -55,12 +29,15 @@ def test_stream_sends_start_nodes_tokens_and_done() -> None:
     assert ("node", {"node": "prepare_brief"}) in events
     assert ("node", {"node": "answer"}) in events
     tokens = "".join(data for name, data in events if name == "token")
-    assert tokens == FAKE_ANSWER
+    assert tokens == fake_answer
 
 
-def test_stream_for_an_unknown_client_is_404_before_streaming() -> None:
-    with make_client() as client:
-        response = client.post("/v1/research/stream", json={**REQUEST, "client_id": "C-9999"})
+def test_stream_for_an_unknown_client_is_404_before_streaming(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        "/v1/research/stream", json={**REQUEST, "client_id": "C-9999"}, headers=auth_headers
+    )
 
     assert response.status_code == 404
     assert response.json()["error"] == "not_found"
