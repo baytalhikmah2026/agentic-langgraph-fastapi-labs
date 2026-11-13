@@ -21,8 +21,8 @@ ResearchGraph = Annotated[CompiledStateGraph, Depends(get_research_graph)]
 
 
 @router.post("")
-def submit_research(body: ResearchRequest, graph: ResearchGraph) -> ResearchResponse:
-    result = graph.invoke({"client_id": body.client_id, "question": body.question})
+async def submit_research(body: ResearchRequest, graph: ResearchGraph) -> ResearchResponse:
+    result = await graph.ainvoke({"client_id": body.client_id, "question": body.question})
     return ResearchResponse(
         request_id=uuid4().hex,
         client_id=body.client_id,

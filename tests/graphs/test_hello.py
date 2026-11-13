@@ -10,11 +10,11 @@ def test_prepare_brief_is_deterministic() -> None:
     assert update == {"brief": "Client C-1042: Energy exposure?"}
 
 
-def test_graph_fills_brief_and_answer() -> None:
+async def test_graph_fills_brief_and_answer() -> None:
     model = GenericFakeChatModel(messages=iter([AIMessage("Energy is 12% of the portfolio.")]))
     graph = build_hello_graph(model)
 
-    result = graph.invoke({"client_id": "C-1042", "question": "Energy exposure?"})
+    result = await graph.ainvoke({"client_id": "C-1042", "question": "Energy exposure?"})
 
     assert result == {
         "client_id": "C-1042",

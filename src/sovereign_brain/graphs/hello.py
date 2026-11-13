@@ -1,4 +1,7 @@
-"""Lab 8: the first Research Desk graph. A plain step prepares the brief, the model answers it."""
+"""The first Research Desk graph (Lab 8), asynchronous since Lab 11.
+
+A plain step prepares the brief, the model answers it.
+"""
 
 from typing import TypedDict
 
@@ -27,8 +30,8 @@ def prepare_brief(state: HelloState) -> dict:
 
 
 def build_hello_graph(model: BaseChatModel) -> CompiledStateGraph:
-    def answer(state: HelloState) -> dict:
-        reply = model.invoke([SystemMessage(SYSTEM_PROMPT), HumanMessage(state["brief"])])
+    async def answer(state: HelloState) -> dict:
+        reply = await model.ainvoke([SystemMessage(SYSTEM_PROMPT), HumanMessage(state["brief"])])
         return {"answer": str(reply.content)}
 
     builder = StateGraph(HelloState)
