@@ -9,7 +9,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sovereign_brain import __version__
-from sovereign_brain.api.v1 import auth, clients, health, research
+from sovereign_brain.api.v1 import auth, clients, graphs, health, research
 from sovereign_brain.core.cache import ResearchCache
 from sovereign_brain.core.errors import register_exception_handlers
 from sovereign_brain.core.logging import configure_logging
@@ -17,7 +17,7 @@ from sovereign_brain.core.rate_limit import limiter
 from sovereign_brain.core.request_id import RequestIdMiddleware
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
-from sovereign_brain.graphs.hello import build_hello_graph
+from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.llm.factory import get_chat_model
 
 logger = logging.getLogger("sovereign_brain")
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.session_factory = async_sessionmaker(engine, expire_on_commit=False)
     redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.cache = ResearchCache(redis_client, settings.cache_ttl_seconds)
-    app.state.research_graph = build_hello_graph(get_chat_model(settings))
+    app.state.research_graph = build_research_graph(get_chat_model(settings))
     logger.info("Research graph ready (model %s)", settings.llm_model)
     yield
     await redis_client.aclose()
@@ -50,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(research.router)
     app.include_router(clients.router)
+    app.include_router(graphs.router)
     return app
 
 

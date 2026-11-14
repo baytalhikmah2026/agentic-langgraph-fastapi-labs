@@ -1,0 +1,21 @@
+from fastapi.testclient import TestClient
+
+
+def test_the_research_state_is_described(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.get("/v1/graphs/research/state", headers=auth_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["graph"] == "research"
+    assert body["nodes"] == ["intake", "analyse"]
+    assert body["fields"]["messages"] == "append (add_messages)"
+    assert body["fields"]["steps"] == "append (add)"
+    assert body["fields"]["status"] == "overwrite"
+
+
+def test_the_state_description_needs_a_token(client: TestClient) -> None:
+    response = client.get("/v1/graphs/research/state")
+
+    assert response.status_code == 401

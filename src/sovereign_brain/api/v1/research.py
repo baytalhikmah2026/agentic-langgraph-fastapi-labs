@@ -8,6 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
+from langchain_core.messages import AIMessageChunk
 from langgraph.graph.state import CompiledStateGraph
 
 from sovereign_brain.core.cache import Cache
@@ -106,7 +107,8 @@ async def stream_research(
         ):
             if mode == "messages":
                 chunk, _metadata = payload
-                if chunk.content:
+                # Only the model's own words: nodes also return prompts and tool results
+                if isinstance(chunk, AIMessageChunk) and chunk.content:
                     yield ServerSentEvent(event="token", data=chunk.content)
             else:
                 for node in payload:

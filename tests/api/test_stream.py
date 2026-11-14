@@ -26,8 +26,8 @@ def test_stream_sends_start_nodes_tokens_and_done(
     names = [name for name, _ in events]
     assert names[0] == "start"
     assert names[-1] == "done"
-    assert ("node", {"node": "prepare_brief"}) in events
-    assert ("node", {"node": "answer"}) in events
+    assert ("node", {"node": "intake"}) in events
+    assert ("node", {"node": "analyse"}) in events
     tokens = "".join(data for name, data in events if name == "token")
     assert tokens == fake_answer
 

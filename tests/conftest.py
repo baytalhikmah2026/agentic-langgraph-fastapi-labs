@@ -20,7 +20,7 @@ from sovereign_brain.core.security import hash_password
 from sovereign_brain.db.base import Base
 from sovereign_brain.db.models import Client, User
 from sovereign_brain.db.session import get_session
-from sovereign_brain.graphs.hello import build_hello_graph
+from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.main import create_app
 
 FAKE_ANSWER = "Energy stocks are 12% of this client's portfolio."
@@ -105,7 +105,7 @@ def app(database_url: str) -> FastAPI:
             yield session
 
     model = GenericFakeChatModel(messages=itertools.cycle([AIMessage(FAKE_ANSWER)]))
-    graph = build_hello_graph(model)
+    graph = build_research_graph(model)
     application.dependency_overrides[get_session] = test_session
     application.dependency_overrides[get_research_graph] = lambda: graph
     return application
