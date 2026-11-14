@@ -24,4 +24,14 @@ You need Git, Docker and uv (see Lab 1).
     uv run pytest                             # automatic tests (no model needed)
     docker compose down                       # stop everything
 
+## Load test (Lab 20)
+
+Run these with the stack started and the cache warmed by `scripts/smoke_test.py`.
+Set SB_LOAD_TEST_PASSWORD (12+ characters) in the terminal first.
+
+    uv run python scripts/create_load_users.py --count 30
+    uv run locust -f locustfile.py --host http://127.0.0.1:8000 --headless --users 30 --spawn-rate 5 --run-time 2m --csv reports/lab20 --html reports/lab20.html
+    uv run python scripts/latency_report.py reports/lab20_stats.csv
+    uv run python scripts/create_load_users.py --count 30 --disable
+
 API documentation: http://127.0.0.1:8000/docs

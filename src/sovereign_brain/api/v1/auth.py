@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordRequestForm
 
 from sovereign_brain.core.security import (
@@ -21,7 +22,11 @@ router = APIRouter(prefix="/v1/auth", tags=["auth"])
 @router.post("/token")
 async def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], users: Users) -> Token:
     user = await users.get(form.username)
-    if user is None or user.disabled or not verify_password(form.password, user.hashed_password):
+    if user is None or user.disabled:
+        raise not_authenticated("Wrong username or password")
+    # Argon2 is slow on purpose: check the password in a worker thread so the event loop
+    # keeps serving other requests in the meantime (Lab 20)
+    if not await run_in_threadpool(verify_password, form.password, user.hashed_password):
         raise not_authenticated("Wrong username or password")
     token, expires_in = create_access_token(user, get_settings())
     return Token(access_token=token, expires_in=expires_in)

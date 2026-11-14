@@ -44,6 +44,7 @@ asyncio_default_fixture_loop_scope = "function"
 dev = [
     "aiosqlite==0.22.1",
     "httpx==0.28.1",
+    "locust==2.47.0",
     "pytest==9.2.0",
     "pytest-asyncio==1.4.1.post1",
     "ruff==0.17.4",
