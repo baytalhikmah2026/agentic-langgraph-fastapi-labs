@@ -1,4 +1,4 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-24)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-25)."""
 
 import asyncio
 import itertools
@@ -85,15 +85,15 @@ def reset_rate_limits() -> None:
 
 
 @pytest.fixture(autouse=True)
-def in_memory_cache(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+def in_memory_cache(monkeypatch: pytest.MonkeyPatch) -> dict[str, dict]:
     """Tests never need Redis: the cache keeps its answers in a dictionary instead."""
-    store: dict[str, str] = {}
+    store: dict[str, dict] = {}
 
-    async def get(self: ResearchCache, client_id: str, question: str) -> str | None:
+    async def get(self: ResearchCache, client_id: str, question: str) -> dict | None:
         return store.get(self.key(client_id, question))
 
-    async def set(self: ResearchCache, client_id: str, question: str, summary: str) -> None:
-        store[self.key(client_id, question)] = summary
+    async def set(self: ResearchCache, client_id: str, question: str, result: dict) -> None:
+        store[self.key(client_id, question)] = result
 
     monkeypatch.setattr(ResearchCache, "get", get)
     monkeypatch.setattr(ResearchCache, "set", set)

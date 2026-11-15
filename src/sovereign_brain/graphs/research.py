@@ -4,10 +4,11 @@ Lab 21: a typed state with reducers, and two stations: intake and analyse.
 Lab 22: analyse can call portfolio tools in a loop (the ReAct pattern).
 Lab 23: classify picks a track: portfolio questions to analyse, general questions to explain.
 Lab 24: review checks every figure of a portfolio answer and sends the draft back if needed.
+Lab 25: input and output schemas: callers send three fields and receive only the answer fields.
 """
 
 import operator
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AnyMessage, BaseMessage, HumanMessage, SystemMessage
@@ -30,14 +31,25 @@ RESEARCH_PROMPT = (
 )
 
 
-class ResearchState(TypedDict):
-    """Everything the graph knows about one research request."""
+class ResearchInput(TypedDict):
+    """What a caller must send to start a run: nothing else is accepted into the state."""
 
-    # Given by the API when the run starts
     client_id: str
     client_profile: str
     question: str
-    # Written by the nodes
+
+
+class ResearchOutput(TypedDict):
+    """What a caller receives at the end of a run: the answer, never the scratchpad."""
+
+    answer: str
+    route: Route
+    checked: NotRequired[bool]  # only portfolio answers are checked
+
+
+class ResearchState(ResearchInput):
+    """Everything the graph knows about one research request (the input fields, plus these)."""
+
     messages: Annotated[list[AnyMessage], add_messages]  # appended: the talk with the model
     steps: Annotated[list[str], operator.add]  # appended: which stations the request passed
     route: Route  # overwritten: general or portfolio (Lab 23)
@@ -122,7 +134,7 @@ def build_research_graph(
             "answer": str(reply.content),
         }
 
-    builder = StateGraph(ResearchState)
+    builder = StateGraph(ResearchState, input_schema=ResearchInput, output_schema=ResearchOutput)
     builder.add_node("intake", intake)
     builder.add_node("classify", classify)
     builder.add_node("analyse", analyse)

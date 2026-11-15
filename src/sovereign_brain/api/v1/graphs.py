@@ -15,3 +15,9 @@ async def research_state(graph: ResearchGraph) -> dict:
     """The research graph's stations and how each state field is updated."""
     nodes = [name for name in graph.get_graph().nodes if not name.startswith("__")]
     return {"graph": graph.name, "nodes": nodes, "fields": describe_fields(ResearchState)}
+
+
+@router.get("/research/schema")
+async def research_schema(graph: ResearchGraph) -> dict:
+    """The research graph's contract: what it accepts and what it returns (JSON Schema)."""
+    return {"input": graph.get_input_jsonschema(), "output": graph.get_output_jsonschema()}

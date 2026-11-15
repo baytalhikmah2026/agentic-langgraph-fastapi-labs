@@ -1,11 +1,12 @@
 import itertools
 from collections.abc import Callable
+from typing import get_type_hints
 
 import pytest
 from langchain_core.messages import AIMessage
 from langgraph.errors import GraphRecursionError
 
-from sovereign_brain.graphs.research import build_research_graph, intake
+from sovereign_brain.graphs.research import ResearchState, build_research_graph, intake
 
 REQUEST = {
     "client_id": "C-1042",
@@ -24,6 +25,8 @@ TOOL_CALL = AIMessage(
 )
 WRONG = AIMessage("Energy is 25% of the portfolio.")
 RIGHT = AIMessage("Energy is 18.5% of the portfolio.")
+# Tests may read the whole state; callers only get the output schema's fields
+EVERYTHING = list(get_type_hints(ResearchState))
 
 
 class StubPortfolio:
@@ -58,7 +61,7 @@ async def test_reducers_append_steps_and_overwrite_status(make_model: Callable) 
     model = make_model([AIMessage("Energy is a modest part of the portfolio.")])
     graph = build_research_graph(model, StubPortfolio())
 
-    result = await graph.ainvoke(REQUEST)
+    result = await graph.ainvoke(REQUEST, output_keys=EVERYTHING)
 
     assert result["steps"] == ["intake", "classify", "analyse", "review"]
     assert result["status"] == "answered"
@@ -70,7 +73,7 @@ async def test_the_agent_calls_a_tool_then_answers(make_model: Callable) -> None
     model = make_model([TOOL_CALL, RIGHT])
     graph = build_research_graph(model, StubPortfolio())
 
-    result = await graph.ainvoke(REQUEST)
+    result = await graph.ainvoke(REQUEST, output_keys=EVERYTHING)
 
     assert result["steps"] == ["intake", "classify", "analyse", "analyse", "review"]
     types = [message.type for message in result["messages"]]
@@ -84,7 +87,7 @@ async def test_a_wrong_figure_is_sent_back_and_corrected(make_model: Callable) -
     model = make_model([TOOL_CALL, WRONG, RIGHT])
     graph = build_research_graph(model, StubPortfolio())
 
-    result = await graph.ainvoke(REQUEST)
+    result = await graph.ainvoke(REQUEST, output_keys=EVERYTHING)
 
     assert result["steps"] == [
         "intake", "classify", "analyse", "analyse", "review", "analyse", "review",
@@ -101,7 +104,9 @@ async def test_the_review_gives_up_after_the_limit(make_model: Callable) -> None
     model = make_model(itertools.cycle([WRONG]))  # always the same wrong figure
     graph = build_research_graph(model, StubPortfolio(), max_revisions=2)
 
-    result = await graph.ainvoke(REQUEST, config={"recursion_limit": 12})
+    result = await graph.ainvoke(
+        REQUEST, config={"recursion_limit": 12}, output_keys=EVERYTHING
+    )
 
     assert result["revisions"] == 2
     assert result["steps"].count("review") == 3
@@ -122,8 +127,29 @@ async def test_a_general_question_takes_the_explain_track(make_model: Callable) 
     graph = build_research_graph(model, StubPortfolio())
     question = "What does a moderate risk profile mean?"
 
-    result = await graph.ainvoke({**REQUEST, "question": question})
+    result = await graph.ainvoke({**REQUEST, "question": question}, output_keys=EVERYTHING)
 
     assert result["route"] == "general"
     assert result["steps"] == ["intake", "classify", "explain"]
     assert result["answer"] == "A moderate profile accepts some ups and downs."
+
+
+async def test_callers_receive_only_the_output_fields(make_model: Callable) -> None:
+    graph = build_research_graph(make_model([TOOL_CALL, RIGHT]), StubPortfolio())
+
+    result = await graph.ainvoke(REQUEST)
+
+    assert result == {
+        "answer": "Energy is 18.5% of the portfolio.",
+        "route": "portfolio",
+        "checked": True,
+    }
+
+
+async def test_fields_outside_the_input_schema_are_ignored(make_model: Callable) -> None:
+    graph = build_research_graph(make_model([AIMessage("A bond is a loan.")]), StubPortfolio())
+    forged = {**REQUEST, "question": "What is a bond?", "checked": True, "revisions": 9}
+
+    result = await graph.ainvoke(forged)
+
+    assert result == {"answer": "A bond is a loan.", "route": "general"}

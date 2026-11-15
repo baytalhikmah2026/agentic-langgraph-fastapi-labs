@@ -29,5 +29,7 @@ class ResearchResponse(BaseModel):
     client_id: str
     status: Literal["accepted", "completed"]
     summary: str | None = None
+    route: Literal["general", "portfolio"] | None = None  # the track the graph took (Lab 25)
+    checked: bool | None = None  # portfolio answers: were all figures found? (Lab 25)
     cached: bool = False
     created_at: datetime

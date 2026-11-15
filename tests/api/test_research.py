@@ -13,6 +13,8 @@ def test_research_runs_the_graph(
     assert body["client_id"] == "C-1042"
     assert body["status"] == "completed"
     assert body["summary"] == fake_answer
+    assert body["route"] == "portfolio"
+    assert body["checked"] is True
     assert body["request_id"] == response.headers["X-Request-ID"]
 
 

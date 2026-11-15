@@ -19,3 +19,13 @@ def test_the_state_description_needs_a_token(client: TestClient) -> None:
     response = client.get("/v1/graphs/research/state")
 
     assert response.status_code == 401
+
+
+def test_the_graph_contract_is_published(client: TestClient, auth_headers: dict[str, str]) -> None:
+    response = client.get("/v1/graphs/research/schema", headers=auth_headers)
+
+    assert response.status_code == 200
+    contract = response.json()
+    assert sorted(contract["input"]["required"]) == ["client_id", "client_profile", "question"]
+    assert sorted(contract["output"]["properties"]) == ["answer", "checked", "route"]
+    assert sorted(contract["output"]["required"]) == ["answer", "route"]

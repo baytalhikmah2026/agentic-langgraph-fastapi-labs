@@ -70,21 +70,23 @@ async def submit_research(
     checked: Checked, graph: ResearchGraph, cache: Cache
 ) -> ResearchResponse:
     client_id, question = checked.body.client_id, checked.body.question
-    summary = await cache.get(client_id, question)
-    cached = summary is not None
+    result = await cache.get(client_id, question)
+    cached = result is not None
     if cached:
         logger.info("Research for %s answered from the cache", client_id)
     else:
         logger.info("Research started for %s", client_id)
+        # The output schema returns only answer, route and checked
         result = await graph.ainvoke(checked.graph_input, config=run_config())
-        summary = result["answer"]
-        await cache.set(client_id, question, summary)
+        await cache.set(client_id, question, result)
         logger.info("Research finished for %s", client_id)
     return ResearchResponse(
         request_id=get_request_id(),
         client_id=client_id,
         status="completed",
-        summary=summary,
+        summary=result["answer"],
+        route=result["route"],
+        checked=result.get("checked"),
         cached=cached,
         created_at=datetime.now(UTC),
     )
