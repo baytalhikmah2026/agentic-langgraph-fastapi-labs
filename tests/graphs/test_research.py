@@ -54,7 +54,7 @@ async def test_reducers_append_steps_and_overwrite_status(make_model: Callable) 
 
     result = await graph.ainvoke(REQUEST)
 
-    assert result["steps"] == ["intake", "analyse"]
+    assert result["steps"] == ["intake", "classify", "analyse"]
     assert result["status"] == "answered"
     assert result["answer"] == "Energy is 12% of the portfolio."
     assert [message.type for message in result["messages"]] == ["system", "human", "ai"]
@@ -66,8 +66,20 @@ async def test_the_agent_calls_a_tool_then_answers(make_model: Callable) -> None
 
     result = await graph.ainvoke(REQUEST)
 
-    assert result["steps"] == ["intake", "analyse", "analyse"]
+    assert result["steps"] == ["intake", "classify", "analyse", "analyse"]
     types = [message.type for message in result["messages"]]
     assert types == ["system", "human", "ai", "tool", "ai"]
     assert '"percent": 18.5' in result["messages"][3].content
     assert result["answer"] == "Energy is 18.5% of the portfolio."
+
+
+async def test_a_general_question_takes_the_explain_track(make_model: Callable) -> None:
+    model = make_model([AIMessage("A moderate profile accepts some ups and downs.")])
+    graph = build_research_graph(model, StubPortfolio())
+    question = "What does a moderate risk profile mean?"
+
+    result = await graph.ainvoke({**REQUEST, "question": question})
+
+    assert result["route"] == "general"
+    assert result["steps"] == ["intake", "classify", "explain"]
+    assert result["answer"] == "A moderate profile accepts some ups and downs."
