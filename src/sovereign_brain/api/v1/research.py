@@ -111,8 +111,13 @@ async def stream_research(
                 if isinstance(chunk, AIMessageChunk) and chunk.content:
                     yield ServerSentEvent(event="token", data=chunk.content)
             else:
-                for node in payload:
+                for node, update in payload.items():
                     yield ServerSentEvent(event="node", data={"node": node})
+                    if node == "review" and update["status"] == "revising":
+                        # The draft streamed so far was sent back: a corrected one follows
+                        yield ServerSentEvent(
+                            event="revision", data={"revision": update["revisions"]}
+                        )
     except MODEL_ERRORS as error:
         logger.error("AI model not available during stream: %r", error)
         yield ServerSentEvent(event="error", data={"error": "model_unavailable"})

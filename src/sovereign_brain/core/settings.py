@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     # Agent safety (Lab 13): the most steps one graph run may take
     graph_recursion_limit: int = 25
+    # Review loop (Lab 24): how often a draft may be sent back for correction
+    max_revisions: int = 2
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

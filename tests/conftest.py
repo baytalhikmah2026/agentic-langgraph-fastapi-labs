@@ -1,8 +1,8 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-22)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-24)."""
 
 import asyncio
 import itertools
-from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +25,7 @@ from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.main import create_app
 from sovereign_brain.services.portfolio import PortfolioService
 
-FAKE_ANSWER = "Energy stocks are 12% of this client's portfolio."
+FAKE_ANSWER = "Energy stocks are a modest part of this client's portfolio."
 PASSWORD = "correct-horse-battery-42"
 PASSWORD_HASH = hash_password(PASSWORD)  # hashed once: Argon2 is slow on purpose
 
@@ -57,10 +57,10 @@ def seed_rows() -> list:
 
 
 @pytest.fixture
-def make_model() -> Callable[[list[BaseMessage]], FakeToolModel]:
+def make_model() -> Callable[[Iterable[BaseMessage]], FakeToolModel]:
     """Builds a fake model that gives the listed replies, one per call."""
 
-    def make(replies: list[BaseMessage]) -> FakeToolModel:
+    def make(replies: Iterable[BaseMessage]) -> FakeToolModel:
         return FakeToolModel(messages=iter(replies))
 
     return make

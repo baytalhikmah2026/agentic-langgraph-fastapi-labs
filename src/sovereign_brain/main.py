@@ -33,7 +33,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.cache = ResearchCache(redis_client, settings.cache_ttl_seconds)
     portfolio = PortfolioService(app.state.session_factory)
-    app.state.research_graph = build_research_graph(get_chat_model(settings), portfolio)
+    app.state.research_graph = build_research_graph(
+        get_chat_model(settings), portfolio, settings.max_revisions
+    )
     logger.info("Research graph ready (model %s)", settings.llm_model)
     yield
     await redis_client.aclose()

@@ -29,6 +29,8 @@ def test_stream_sends_start_nodes_tokens_and_done(
     assert ("node", {"node": "intake"}) in events
     assert ("node", {"node": "classify"}) in events
     assert ("node", {"node": "analyse"}) in events
+    assert ("node", {"node": "review"}) in events
+    assert "revision" not in names
     tokens = "".join(data for name, data in events if name == "token")
     assert tokens == fake_answer
 
