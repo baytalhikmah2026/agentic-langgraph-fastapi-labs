@@ -19,6 +19,7 @@ from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
 from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.llm.factory import get_chat_model
+from sovereign_brain.services.portfolio import PortfolioService
 
 logger = logging.getLogger("sovereign_brain")
 
@@ -31,7 +32,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.session_factory = async_sessionmaker(engine, expire_on_commit=False)
     redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.cache = ResearchCache(redis_client, settings.cache_ttl_seconds)
-    app.state.research_graph = build_research_graph(get_chat_model(settings))
+    portfolio = PortfolioService(app.state.session_factory)
+    app.state.research_graph = build_research_graph(get_chat_model(settings), portfolio)
     logger.info("Research graph ready (model %s)", settings.llm_model)
     yield
     await redis_client.aclose()

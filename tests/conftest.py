@@ -1,15 +1,16 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-19)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-22)."""
 
 import asyncio
 import itertools
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -18,14 +19,22 @@ from sovereign_brain.core.cache import ResearchCache
 from sovereign_brain.core.rate_limit import limiter
 from sovereign_brain.core.security import hash_password
 from sovereign_brain.db.base import Base
-from sovereign_brain.db.models import Client, User
+from sovereign_brain.db.models import Client, Position, User
 from sovereign_brain.db.session import get_session
 from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.main import create_app
+from sovereign_brain.services.portfolio import PortfolioService
 
 FAKE_ANSWER = "Energy stocks are 12% of this client's portfolio."
 PASSWORD = "correct-horse-battery-42"
 PASSWORD_HASH = hash_password(PASSWORD)  # hashed once: Argon2 is slow on purpose
+
+
+class FakeToolModel(GenericFakeChatModel):
+    """The tests' fake model, able to take tools: it ignores them and gives scripted replies."""
+
+    def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> "FakeToolModel":
+        return self
 
 
 def seed_rows() -> list:
@@ -38,7 +47,23 @@ def seed_rows() -> list:
              role="analyst", disabled=False),
         User(username="former.analyst", full_name="Former Analyst",
              hashed_password=PASSWORD_HASH, role="analyst", disabled=True),
+        Position(id=1, client_id="C-1042", ticker="GLFP", name="Gulf Petroleum Co",
+                 sector="Energy", market_value_usd=120000),
+        Position(id=2, client_id="C-1042", ticker="SNRS", name="Sunrise Solar",
+                 sector="Energy", market_value_usd=65000),
+        Position(id=3, client_id="C-1042", ticker="MDNB", name="Medina Bank",
+                 sector="Financials", market_value_usd=815000),
     ]
+
+
+@pytest.fixture
+def make_model() -> Callable[[list[BaseMessage]], FakeToolModel]:
+    """Builds a fake model that gives the listed replies, one per call."""
+
+    def make(replies: list[BaseMessage]) -> FakeToolModel:
+        return FakeToolModel(messages=iter(replies))
+
+    return make
 
 
 @pytest.fixture
@@ -104,8 +129,8 @@ def app(database_url: str) -> FastAPI:
         async with sessions() as session:
             yield session
 
-    model = GenericFakeChatModel(messages=itertools.cycle([AIMessage(FAKE_ANSWER)]))
-    graph = build_research_graph(model)
+    model = FakeToolModel(messages=itertools.cycle([AIMessage(FAKE_ANSWER)]))
+    graph = build_research_graph(model, PortfolioService(sessions))
     application.dependency_overrides[get_session] = test_session
     application.dependency_overrides[get_research_graph] = lambda: graph
     return application

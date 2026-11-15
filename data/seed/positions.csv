@@ -1,0 +1,14 @@
+id,client_id,ticker,name,sector,market_value_usd
+1,C-1042,GLFP,Gulf Petroleum Co,Energy,120000
+2,C-1042,SNRS,Sunrise Solar,Energy,65000
+3,C-1042,MDNB,Medina Bank,Financials,300000
+4,C-1042,ATLS,Atlas Telecom,Communication,215000
+5,C-1042,GTB30,Global Treasury Bond 2030,Government Bonds,300000
+6,C-2077,GTB30,Global Treasury Bond 2030,Government Bonds,1200000
+7,C-2077,MDNB,Medina Bank,Financials,300000
+8,C-2077,FLTC,Fleet Fuel Corp,Energy,200000
+9,C-2077,CSTL,Coastal Shipping,Industrials,300000
+10,C-3105,NOVA,Nova Robotics,Technology,600000
+11,C-3105,CLDX,Cloudex Software,Technology,450000
+12,C-3105,SNRS,Sunrise Solar,Energy,150000
+13,C-3105,HLTH,Healix Biotech,Health Care,300000

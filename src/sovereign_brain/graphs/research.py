@@ -1,6 +1,7 @@
 """The Research Desk graph (Module 3): one graph that grows lab by lab.
 
 Lab 21: a typed state with reducers, and two stations: intake and analyse.
+Lab 22: analyse can call portfolio tools in a loop (the ReAct pattern).
 """
 
 import operator
@@ -11,11 +12,17 @@ from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.prebuilt import ToolNode, tools_condition
+
+from sovereign_brain.services.portfolio import PortfolioService
+from sovereign_brain.tools.portfolio import build_portfolio_tools
 
 RESEARCH_PROMPT = (
     "You are an analyst on the Research Desk of Crescent Ledger Bank. "
+    "For questions about a client's holdings or exposure, call the tools first and "
+    "quote only the figures they return. "
     "Answer in at most three sentences. "
-    "If you do not have the client's data, say which data you would check."
+    "If the tools have no data, say which data you would check."
 )
 
 
@@ -43,20 +50,24 @@ def intake(state: ResearchState) -> dict:
     }
 
 
-def build_research_graph(model: BaseChatModel) -> CompiledStateGraph:
+def build_research_graph(model: BaseChatModel, portfolio: PortfolioService) -> CompiledStateGraph:
+    tools = build_portfolio_tools(portfolio)
+    model_with_tools = model.bind_tools(tools)
+
     async def analyse(state: ResearchState) -> dict:
-        reply = await model.ainvoke(state["messages"])
-        return {
-            "messages": [reply],
-            "steps": ["analyse"],
-            "status": "answered",
-            "answer": str(reply.content),
-        }
+        """Reason: the model either asks for tools or writes the final answer."""
+        reply = await model_with_tools.ainvoke(state["messages"])
+        update = {"messages": [reply], "steps": ["analyse"]}
+        if not reply.tool_calls:
+            update |= {"status": "answered", "answer": str(reply.content)}
+        return update
 
     builder = StateGraph(ResearchState)
     builder.add_node("intake", intake)
     builder.add_node("analyse", analyse)
+    builder.add_node("tools", ToolNode(tools))  # act: run the requested tools
     builder.add_edge(START, "intake")
     builder.add_edge("intake", "analyse")
-    builder.add_edge("analyse", END)
+    builder.add_conditional_edges("analyse", tools_condition)  # tools, or END when done
+    builder.add_edge("tools", "analyse")  # observe: the results go back to the model
     return builder.compile(name="research")
