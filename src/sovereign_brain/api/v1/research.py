@@ -115,9 +115,10 @@ async def mark_thread_used(
     )
 
 
-def run_config(checked: CheckedRequest) -> dict:
+def run_config(key: str) -> dict:
+    """The configuration of one run on a thread: which thread, how many steps, which request."""
     return {
-        **thread_config(checked.thread_key),
+        **thread_config(key),
         "recursion_limit": get_settings().graph_recursion_limit,
         "metadata": {"request_id": get_request_id()},
     }
@@ -143,7 +144,7 @@ async def submit_research(
         await mark_thread_used(checked, context, registry)
         # The output schema returns only answer, route and checked
         result = await graph.ainvoke(
-            checked.graph_input, config=run_config(checked), context=context
+            checked.graph_input, config=run_config(checked.thread_key), context=context
         )
         if use_cache:
             await cache.set(client_id, question, result)
@@ -171,7 +172,7 @@ async def trace_research(
     await mark_thread_used(checked, context, registry)
     result = await graph.ainvoke(
         checked.graph_input,
-        config=run_config(checked),
+        config=run_config(checked.thread_key),
         context=context,
         output_keys=TRACE_KEYS,
     )
@@ -208,7 +209,7 @@ async def stream_research(
     try:
         async for mode, payload in graph.astream(
             checked.graph_input,
-            config=run_config(checked),
+            config=run_config(checked.thread_key),
             context=context,
             stream_mode=["updates", "messages"],
         ):

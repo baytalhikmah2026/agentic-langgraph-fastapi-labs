@@ -16,6 +16,7 @@ class ThreadSnapshot(BaseModel):
     checkpoint_id: str
     step: int
     updated_at: str
+    next: list[str] = []  # stations still to run: not empty after an interrupted run (Lab 35)
 
 
 class ThreadMessage(BaseModel):

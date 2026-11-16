@@ -1,15 +1,21 @@
-"""Conversation threads: look at what the Research Desk remembers (Labs 31-34)."""
+"""Conversation threads: look at what the Research Desk remembers (Labs 31-35)."""
 
+import logging
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Response, status
 
-from sovereign_brain.api.v1.research import Registry, ResearchGraph
+from sovereign_brain.api.v1.research import Registry, ResearchGraph, RunContext, run_config
+from sovereign_brain.core.rate_limit import model_call_gate
+from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.memory.threads import THREAD_ID_PATTERN, thread_config, thread_key
+from sovereign_brain.schemas.research import ResearchResponse
 from sovereign_brain.schemas.thread import ThreadMessage, ThreadSnapshot
 
 router = APIRouter(prefix="/v1/threads", tags=["threads"], dependencies=[Depends(get_current_user)])
+logger = logging.getLogger("sovereign_brain.research")
 
 ThreadId = Annotated[str, Path(pattern=THREAD_ID_PATTERN)]
 
@@ -35,6 +41,7 @@ async def read_thread(
         checkpoint_id=snapshot.config["configurable"]["checkpoint_id"],
         step=snapshot.metadata["step"],
         updated_at=snapshot.created_at,
+        next=list(snapshot.next),
     )
 
 
@@ -51,6 +58,41 @@ async def read_thread_messages(
         for m in snapshot.values["messages"]
         if m.type != "system" and (m.content or m.type != "ai")  # no prompt, no empty tool requests
     ]
+
+
+@router.post("/{thread_id}/resume", dependencies=[Depends(model_call_gate)])
+async def resume_thread(
+    thread_id: ThreadId,
+    graph: ResearchGraph,
+    user: CurrentUser,
+    context: RunContext,
+    registry: Registry,
+) -> ResearchResponse:
+    """Finish an interrupted run from its last checkpoint, without repeating finished stations."""
+    key = thread_key(user.username, thread_id)
+    config = run_config(key)
+    snapshot = await graph.aget_state(config)
+    if not snapshot.values:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Thread {thread_id} not found")
+    if not snapshot.next:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"Thread {thread_id} has no interrupted run to resume"
+        )
+    client_id = snapshot.values["client_id"]
+    logger.info("Resuming thread %s at %s", thread_id, ", ".join(snapshot.next))
+    await registry.touch(key, user.username, thread_id, client_id)
+    # No input: LangGraph continues from the saved checkpoint instead of starting again
+    result = await graph.ainvoke(None, config=config, context=context)
+    return ResearchResponse(
+        request_id=get_request_id(),
+        client_id=client_id,
+        status="completed",
+        summary=result["answer"],
+        route=result["route"],
+        checked=result.get("checked"),
+        thread_id=thread_id,
+        created_at=datetime.now(UTC),
+    )
 
 
 @router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)

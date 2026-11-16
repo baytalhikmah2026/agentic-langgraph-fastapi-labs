@@ -33,7 +33,13 @@ def error_response(
 
 
 async def http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    names = {401: "unauthorized", 403: "forbidden", 404: "not_found", 405: "method_not_allowed"}
+    names = {
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        405: "method_not_allowed",
+        409: "conflict",
+    }
     error = names.get(exc.status_code, "http_error")
     return error_response(exc.status_code, error, str(exc.detail), headers=exc.headers)
 

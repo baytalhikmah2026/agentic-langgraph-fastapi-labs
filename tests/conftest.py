@@ -1,4 +1,4 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-34)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-35)."""
 
 import asyncio
 import itertools
@@ -39,6 +39,24 @@ class FakeToolModel(GenericFakeChatModel):
         return self
 
 
+class FailsOnce:
+    """Scripted replies with one failure: call number `fail_on_call` finds the model down."""
+
+    def __init__(self, replies: Iterable[BaseMessage], fail_on_call: int) -> None:
+        self.replies = iter(replies)
+        self.fail_on_call = fail_on_call
+        self.calls = 0
+
+    def __iter__(self) -> "FailsOnce":
+        return self
+
+    def __next__(self) -> BaseMessage:
+        self.calls += 1
+        if self.calls == self.fail_on_call:
+            raise ConnectionError("The AI model is not reachable")
+        return next(self.replies)
+
+
 def seed_rows() -> list:
     return [
         Client(id="C-1042", name="Amina Rahman Holdings", segment="private-banking",
@@ -64,6 +82,16 @@ def make_model() -> Callable[[Iterable[BaseMessage]], FakeToolModel]:
 
     def make(replies: Iterable[BaseMessage]) -> FakeToolModel:
         return FakeToolModel(messages=iter(replies))
+
+    return make
+
+
+@pytest.fixture
+def make_flaky_model() -> Callable[[Iterable[BaseMessage], int], FakeToolModel]:
+    """Builds a fake model whose model server is down for exactly one call (Lab 35)."""
+
+    def make(replies: Iterable[BaseMessage], fail_on_call: int = 1) -> FakeToolModel:
+        return FakeToolModel(messages=FailsOnce(replies, fail_on_call))
 
     return make
 
