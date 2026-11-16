@@ -1,4 +1,4 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-31)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-34)."""
 
 import asyncio
 import itertools
@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from sovereign_brain.api.v1.research import get_portfolio, get_research_graph
+from sovereign_brain.api.v1.research import get_portfolio, get_research_graph, get_thread_registry
 from sovereign_brain.core.cache import ResearchCache
 from sovereign_brain.core.rate_limit import limiter
 from sovereign_brain.core.security import hash_password
@@ -24,6 +24,7 @@ from sovereign_brain.db.models import Client, Position, User
 from sovereign_brain.db.session import get_session
 from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.main import create_app
+from sovereign_brain.memory.retention import ThreadRegistry
 from sovereign_brain.services.portfolio import PortfolioService
 
 FAKE_ANSWER = "Energy stocks are a modest part of this client's portfolio."
@@ -136,6 +137,8 @@ def app(database_url: str) -> FastAPI:
     application.dependency_overrides[get_session] = test_session
     application.dependency_overrides[get_research_graph] = lambda: graph
     application.dependency_overrides[get_portfolio] = lambda: portfolio
+    registry = ThreadRegistry(sessions)
+    application.dependency_overrides[get_thread_registry] = lambda: registry
     return application
 
 

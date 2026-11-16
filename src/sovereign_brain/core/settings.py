@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     checkpoint_store: Literal["memory", "sqlite", "postgres"] = "memory"
     checkpoint_sqlite_path: str = "data/checkpoints.sqlite"
     checkpoint_pool_size: int = 10  # PostgreSQL connections for checkpoints (Lab 33)
+    # Thread expiry (Lab 34): unused threads are removed after this time (default 7 days)
+    thread_ttl_minutes: int = 10080
+    cleanup_interval_minutes: int = 60
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

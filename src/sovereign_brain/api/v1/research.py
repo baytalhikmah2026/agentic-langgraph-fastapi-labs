@@ -20,6 +20,7 @@ from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
 from sovereign_brain.graphs.context import ResearchContext
+from sovereign_brain.memory.retention import ThreadRegistry
 from sovereign_brain.memory.threads import thread_config, thread_key
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
 from sovereign_brain.services.portfolio import PortfolioService
@@ -63,6 +64,14 @@ def research_context(
 RunContext = Annotated[ResearchContext, Depends(research_context)]
 
 
+def get_thread_registry(request: Request) -> ThreadRegistry:
+    """The thread registry created at start-up (Lab 34)."""
+    return request.app.state.thread_registry
+
+
+Registry = Annotated[ThreadRegistry, Depends(get_thread_registry)]
+
+
 @dataclass
 class CheckedRequest:
     """A valid research request for a client that exists, ready for the graph."""
@@ -97,6 +106,15 @@ async def check_request(
 Checked = Annotated[CheckedRequest, Depends(check_request)]
 
 
+async def mark_thread_used(
+    checked: CheckedRequest, context: ResearchContext, registry: ThreadRegistry
+) -> None:
+    """Every run on a thread renews its expiry time (Lab 34)."""
+    await registry.touch(
+        checked.thread_key, context.analyst, checked.thread_id, checked.body.client_id
+    )
+
+
 def run_config(checked: CheckedRequest) -> dict:
     return {
         **thread_config(checked.thread_key),
@@ -107,7 +125,11 @@ def run_config(checked: CheckedRequest) -> dict:
 
 @router.post("", dependencies=[Depends(model_call_gate)])
 async def submit_research(
-    checked: Checked, graph: ResearchGraph, context: RunContext, cache: Cache
+    checked: Checked,
+    graph: ResearchGraph,
+    context: RunContext,
+    cache: Cache,
+    registry: Registry,
 ) -> ResearchResponse:
     client_id, question = checked.body.client_id, checked.body.question
     # A follow-up depends on its conversation, so only new questions use the cache
@@ -118,6 +140,7 @@ async def submit_research(
         logger.info("Research for %s answered from the cache", client_id)
     else:
         logger.info("Research started for %s", client_id)
+        await mark_thread_used(checked, context, registry)
         # The output schema returns only answer, route and checked
         result = await graph.ainvoke(
             checked.graph_input, config=run_config(checked), context=context
@@ -140,11 +163,12 @@ async def submit_research(
 
 @router.post("/trace", dependencies=[Depends(model_call_gate)])
 async def trace_research(
-    checked: Checked, graph: ResearchGraph, context: RunContext
+    checked: Checked, graph: ResearchGraph, context: RunContext, registry: Registry
 ) -> ResearchTrace:
     """The same research, answered together with its audit trail (never cached)."""
     client_id = checked.body.client_id
     logger.info("Traced research started for %s", client_id)
+    await mark_thread_used(checked, context, registry)
     result = await graph.ainvoke(
         checked.graph_input,
         config=run_config(checked),
@@ -168,10 +192,11 @@ async def trace_research(
     "/stream", response_class=EventSourceResponse, dependencies=[Depends(model_call_gate)]
 )
 async def stream_research(
-    checked: Checked, graph: ResearchGraph, context: RunContext
+    checked: Checked, graph: ResearchGraph, context: RunContext, registry: Registry
 ) -> AsyncIterator[ServerSentEvent]:
     """The same research, streamed as Server-Sent Events while the model writes."""
     request_id = get_request_id()
+    await mark_thread_used(checked, context, registry)
     yield ServerSentEvent(
         event="start",
         data={
