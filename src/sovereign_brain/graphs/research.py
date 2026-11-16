@@ -8,6 +8,7 @@ Lab 25: input and output schemas: callers send three fields and receive only the
 Lab 26: an append-only audit trail: every station adds what it decided and when.
 Lab 28: services and limits arrive with each run (context_schema), not at build time.
 Lab 30: the model chooses the track (structured output); the word rules are the fallback.
+Lab 31: a checkpointer keeps each thread's state, so follow-ups continue a conversation.
 """
 
 import logging
@@ -16,6 +17,7 @@ from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AnyMessage, BaseMessage, HumanMessage, SystemMessage
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
@@ -52,7 +54,7 @@ class ResearchOutput(TypedDict):
 
     answer: str
     route: Route
-    checked: NotRequired[bool]  # only portfolio answers are checked
+    checked: NotRequired[bool | None]  # only portfolio answers are checked
 
 
 class ResearchState(ResearchInput):
@@ -64,18 +66,25 @@ class ResearchState(ResearchInput):
     status: Literal["received", "drafted", "revising", "answered"]  # overwritten
     answer: str  # overwritten: the latest answer
     revisions: int  # overwritten: how often the review sent the draft back (Lab 24)
-    checked: bool  # overwritten: True when every figure was found in the tool results
+    checked: bool | None  # overwritten: True when every figure was found; None until checked
 
 
 def intake(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
-    """Turn the request into the first messages for the model (no AI in this step)."""
+    """Turn the request into messages for the model (no AI in this step).
+
+    A new thread starts with the system prompt; a follow-up only adds the new question.
+    The per-question fields (status, revisions, checked) start again for every question.
+    """
     brief = f"Client {state['client_id']} ({state['client_profile']}): {state['question']}"
+    first_turn = not state.get("messages")
+    opening = [SystemMessage(RESEARCH_PROMPT)] if first_turn else []
     note = f"Request received for {state['client_id']} from {runtime.context.analyst}"
     return {
-        "messages": [SystemMessage(RESEARCH_PROMPT), HumanMessage(brief)],
-        "trail": mark("intake", note),
+        "messages": [*opening, HumanMessage(brief)],
+        "trail": mark("intake", note if first_turn else f"{note} (follow-up)"),
         "status": "received",
         "revisions": 0,
+        "checked": None,
     }
 
 
@@ -125,8 +134,13 @@ def review(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
     }
 
 
-def build_research_graph(model: BaseChatModel) -> CompiledStateGraph:
-    """Built once at start-up; each run brings its own ResearchContext."""
+def build_research_graph(
+    model: BaseChatModel, checkpointer: BaseCheckpointSaver | None = None
+) -> CompiledStateGraph:
+    """Built once at start-up; each run brings its own ResearchContext.
+
+    With a checkpointer (Lab 31), every run must name a thread in its configuration.
+    """
     model_with_tools = model.bind_tools(PORTFOLIO_TOOLS)
     router = model.with_structured_output(RouteDecision)
 
@@ -193,4 +207,4 @@ def build_research_graph(model: BaseChatModel) -> CompiledStateGraph:
     builder.add_edge("tools", "analyse")  # observe: the results go back to the model
     builder.add_conditional_edges("review", after_review, {"revise": "analyse", "done": END})
     builder.add_edge("explain", END)
-    return builder.compile(name="research")
+    return builder.compile(name="research", checkpointer=checkpointer)

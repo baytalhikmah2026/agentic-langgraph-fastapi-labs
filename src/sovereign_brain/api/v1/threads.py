@@ -1,0 +1,38 @@
+"""Conversation threads: look at what the Research Desk remembers (Lab 31)."""
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Path, status
+
+from sovereign_brain.api.v1.research import ResearchGraph
+from sovereign_brain.core.security import CurrentUser, get_current_user
+from sovereign_brain.memory.threads import THREAD_ID_PATTERN, thread_config, thread_key
+from sovereign_brain.schemas.thread import ThreadSnapshot
+
+router = APIRouter(prefix="/v1/threads", tags=["threads"], dependencies=[Depends(get_current_user)])
+
+ThreadId = Annotated[str, Path(pattern=THREAD_ID_PATTERN)]
+
+
+@router.get("/{thread_id}")
+async def read_thread(
+    thread_id: ThreadId, graph: ResearchGraph, user: CurrentUser
+) -> ThreadSnapshot:
+    """The latest checkpoint of one of your threads."""
+    snapshot = await graph.aget_state(thread_config(thread_key(user.username, thread_id)))
+    if not snapshot.values:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Thread {thread_id} not found")
+    values = snapshot.values
+    questions = [m for m in values["messages"] if m.type == "human" and m.name != "reviewer"]
+    return ThreadSnapshot(
+        thread_id=thread_id,
+        client_id=values["client_id"],
+        turns=len(questions),
+        messages=len(values["messages"]),
+        last_question=values["question"],
+        last_answer=values.get("answer"),
+        route=values.get("route"),
+        checkpoint_id=snapshot.config["configurable"]["checkpoint_id"],
+        step=snapshot.metadata["step"],
+        updated_at=snapshot.created_at,
+    )

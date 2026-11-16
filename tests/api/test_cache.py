@@ -16,6 +16,7 @@ def test_the_same_question_is_answered_from_the_cache(
     assert second["cached"] is True
     assert second["summary"] == first["summary"]
     assert second["route"] == first["route"] == "portfolio"
+    assert second["thread_id"] is None  # a cached answer starts no conversation
     assert len(in_memory_cache) == 1
 
 

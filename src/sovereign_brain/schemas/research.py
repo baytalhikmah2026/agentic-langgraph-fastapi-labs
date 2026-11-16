@@ -15,6 +15,10 @@ class ResearchRequest(BaseModel):
     question: str = Field(min_length=10, max_length=2000)
     priority: Literal["normal", "urgent"] = "normal"
     max_sources: int = Field(default=3, ge=1, le=10)
+    # Continue a conversation (Lab 31); leave it out to start a new one
+    thread_id: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9-]{1,64}$", examples=["energy-review"]
+    )
 
     @field_validator("client_id", mode="before")
     @classmethod
@@ -31,6 +35,7 @@ class ResearchResponse(BaseModel):
     summary: str | None = None
     route: Literal["general", "portfolio"] | None = None  # the track the graph took (Lab 25)
     checked: bool | None = None  # portfolio answers: were all figures found? (Lab 25)
+    thread_id: str | None = None  # send it back to ask a follow-up (Lab 31)
     cached: bool = False
     created_at: datetime
 
@@ -51,5 +56,6 @@ class ResearchTrace(BaseModel):
     summary: str
     route: Literal["general", "portfolio"]
     checked: bool | None = None
+    thread_id: str
     trail: list[TrailStep]
     created_at: datetime

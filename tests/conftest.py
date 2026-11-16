@@ -1,4 +1,4 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-28)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-31)."""
 
 import asyncio
 import itertools
@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, BaseMessage
+from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -130,7 +131,7 @@ def app(database_url: str) -> FastAPI:
             yield session
 
     model = FakeToolModel(messages=itertools.cycle([AIMessage(FAKE_ANSWER)]))
-    graph = build_research_graph(model)
+    graph = build_research_graph(model, checkpointer=InMemorySaver())
     portfolio = PortfolioService(sessions)
     application.dependency_overrides[get_session] = test_session
     application.dependency_overrides[get_research_graph] = lambda: graph

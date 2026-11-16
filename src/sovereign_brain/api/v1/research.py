@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
@@ -19,6 +20,7 @@ from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
 from sovereign_brain.graphs.context import ResearchContext
+from sovereign_brain.memory.threads import thread_config, thread_key
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
 from sovereign_brain.services.portfolio import PortfolioService
 
@@ -67,9 +69,13 @@ class CheckedRequest:
 
     body: ResearchRequest
     graph_input: dict
+    thread_id: str  # what the analyst sees and sends back for a follow-up (Lab 31)
+    thread_key: str  # what the checkpointer stores: "<username>:<thread_id>"
 
 
-async def check_request(body: ResearchRequest, clients: Clients) -> CheckedRequest:
+async def check_request(
+    body: ResearchRequest, clients: Clients, user: CurrentUser
+) -> CheckedRequest:
     client = await clients.get(body.client_id)
     if client is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Client {body.client_id} not found")
@@ -79,14 +85,21 @@ async def check_request(body: ResearchRequest, clients: Clients) -> CheckedReque
         "client_profile": profile,
         "question": body.question,
     }
-    return CheckedRequest(body=body, graph_input=graph_input)
+    thread_id = body.thread_id or uuid4().hex  # no thread given: a new conversation
+    return CheckedRequest(
+        body=body,
+        graph_input=graph_input,
+        thread_id=thread_id,
+        thread_key=thread_key(user.username, thread_id),
+    )
 
 
 Checked = Annotated[CheckedRequest, Depends(check_request)]
 
 
-def run_config() -> dict:
+def run_config(checked: CheckedRequest) -> dict:
     return {
+        **thread_config(checked.thread_key),
         "recursion_limit": get_settings().graph_recursion_limit,
         "metadata": {"request_id": get_request_id()},
     }
@@ -97,7 +110,9 @@ async def submit_research(
     checked: Checked, graph: ResearchGraph, context: RunContext, cache: Cache
 ) -> ResearchResponse:
     client_id, question = checked.body.client_id, checked.body.question
-    result = await cache.get(client_id, question)
+    # A follow-up depends on its conversation, so only new questions use the cache
+    use_cache = checked.body.thread_id is None
+    result = await cache.get(client_id, question) if use_cache else None
     cached = result is not None
     if cached:
         logger.info("Research for %s answered from the cache", client_id)
@@ -105,9 +120,10 @@ async def submit_research(
         logger.info("Research started for %s", client_id)
         # The output schema returns only answer, route and checked
         result = await graph.ainvoke(
-            checked.graph_input, config=run_config(), context=context
+            checked.graph_input, config=run_config(checked), context=context
         )
-        await cache.set(client_id, question, result)
+        if use_cache:
+            await cache.set(client_id, question, result)
         logger.info("Research finished for %s", client_id)
     return ResearchResponse(
         request_id=get_request_id(),
@@ -116,6 +132,7 @@ async def submit_research(
         summary=result["answer"],
         route=result["route"],
         checked=result.get("checked"),
+        thread_id=None if cached else checked.thread_id,  # a cached answer has no thread
         cached=cached,
         created_at=datetime.now(UTC),
     )
@@ -129,7 +146,10 @@ async def trace_research(
     client_id = checked.body.client_id
     logger.info("Traced research started for %s", client_id)
     result = await graph.ainvoke(
-        checked.graph_input, config=run_config(), context=context, output_keys=TRACE_KEYS
+        checked.graph_input,
+        config=run_config(checked),
+        context=context,
+        output_keys=TRACE_KEYS,
     )
     logger.info("Traced research finished for %s", client_id)
     return ResearchTrace(
@@ -138,6 +158,7 @@ async def trace_research(
         summary=result["answer"],
         route=result["route"],
         checked=result.get("checked"),
+        thread_id=checked.thread_id,
         trail=result["trail"],
         created_at=datetime.now(UTC),
     )
@@ -152,12 +173,17 @@ async def stream_research(
     """The same research, streamed as Server-Sent Events while the model writes."""
     request_id = get_request_id()
     yield ServerSentEvent(
-        event="start", data={"request_id": request_id, "client_id": checked.body.client_id}
+        event="start",
+        data={
+            "request_id": request_id,
+            "client_id": checked.body.client_id,
+            "thread_id": checked.thread_id,
+        },
     )
     try:
         async for mode, payload in graph.astream(
             checked.graph_input,
-            config=run_config(),
+            config=run_config(checked),
             context=context,
             stream_mode=["updates", "messages"],
         ):

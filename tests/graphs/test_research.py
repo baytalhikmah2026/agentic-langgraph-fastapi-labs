@@ -182,7 +182,7 @@ async def test_fields_outside_the_input_schema_are_ignored(make_model: Callable)
 
     result = await graph.ainvoke(forged, context=CONTEXT)
 
-    assert result == {"answer": "A bond is a loan.", "route": "general"}
+    assert result == {"answer": "A bond is a loan.", "route": "general", "checked": None}
 
 
 async def test_each_run_brings_its_own_revision_limit(make_model: Callable) -> None:
