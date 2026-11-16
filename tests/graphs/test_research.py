@@ -50,6 +50,18 @@ class StubPortfolio:
 
 # What the API would bring along for amina; the portfolio is the stub above
 CONTEXT = ResearchContext(portfolio=StubPortfolio(), analyst="amina", max_revisions=2)
+# The same, with the model choosing the route (Lab 30)
+MODEL_ROUTER = ResearchContext(portfolio=StubPortfolio(), analyst="amina", router="model")
+ROUTE_TO_GENERAL = AIMessage(
+    "",
+    tool_calls=[
+        {
+            "name": "RouteDecision",
+            "args": {"route": "general", "reason": "A definition, not a holding"},
+            "id": "route-1",
+        }
+    ],
+)
 
 
 def test_intake_writes_the_first_messages() -> None:
@@ -182,3 +194,25 @@ async def test_each_run_brings_its_own_revision_limit(make_model: Callable) -> N
     assert result["revisions"] == 0
     assert result["checked"] is False
     assert result["trail"][-1]["note"] == "Gave up after 0 revisions, unsupported: 25"
+
+
+async def test_the_model_chooses_the_route(make_model: Callable) -> None:
+    model = make_model([ROUTE_TO_GENERAL, AIMessage("Exposure is the share at risk.")])
+    graph = build_research_graph(model)
+
+    result = await graph.ainvoke(REQUEST, context=MODEL_ROUTER, output_keys=EVERYTHING)
+
+    assert result["route"] == "general"  # the word rules alone would say portfolio
+    assert result["trail"][1]["note"] == "Route: general (model: A definition, not a holding)"
+    assert result["answer"] == "Exposure is the share at risk."
+
+
+async def test_the_rules_step_in_without_a_model_decision(make_model: Callable) -> None:
+    model = make_model([AIMessage("I am not sure."), TOOL_CALL, RIGHT])
+    graph = build_research_graph(model)
+
+    result = await graph.ainvoke(REQUEST, context=MODEL_ROUTER, output_keys=EVERYTHING)
+
+    assert result["route"] == "portfolio"
+    assert result["trail"][1]["note"] == "Route: portfolio (rules fallback)"
+    assert result["answer"] == "Energy is 18.5% of the portfolio."

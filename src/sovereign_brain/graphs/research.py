@@ -7,8 +7,10 @@ Lab 24: review checks every figure of a portfolio answer and sends the draft bac
 Lab 25: input and output schemas: callers send three fields and receive only the answer fields.
 Lab 26: an append-only audit trail: every station adds what it decided and when.
 Lab 28: services and limits arrive with each run (context_schema), not at build time.
+Lab 30: the model chooses the track (structured output); the word rules are the fallback.
 """
 
+import logging
 import operator
 from typing import Annotated, Literal, NotRequired, TypedDict
 
@@ -22,9 +24,11 @@ from langgraph.runtime import Runtime
 
 from sovereign_brain.graphs.context import ResearchContext
 from sovereign_brain.graphs.review import unsupported_figures
-from sovereign_brain.graphs.routing import Route, classify_question
+from sovereign_brain.graphs.routing import ROUTER_PROMPT, Route, RouteDecision, classify_question
 from sovereign_brain.graphs.trail import TrailEntry, mark
 from sovereign_brain.tools.portfolio import PORTFOLIO_TOOLS
+
+logger = logging.getLogger("sovereign_brain.research")
 
 RESEARCH_PROMPT = (
     "You are an analyst on the Research Desk of Crescent Ledger Bank. "
@@ -76,7 +80,7 @@ def intake(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
 
 
 def classify(state: ResearchState) -> dict:
-    """Read the question and choose a track (rules only, no AI in this step)."""
+    """Choose a track by the word rules (Lab 23); the fallback of the model router."""
     route = classify_question(state["question"])
     return {"route": route, "trail": mark("classify", f"Route: {route}")}
 
@@ -124,6 +128,25 @@ def review(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
 def build_research_graph(model: BaseChatModel) -> CompiledStateGraph:
     """Built once at start-up; each run brings its own ResearchContext."""
     model_with_tools = model.bind_tools(PORTFOLIO_TOOLS)
+    router = model.with_structured_output(RouteDecision)
+
+    async def choose_route(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
+        """The classify station: the model decides; the rules step in if it cannot."""
+        if runtime.context.router == "rules":
+            return classify(state)
+        try:
+            decision = await router.ainvoke(
+                [SystemMessage(ROUTER_PROMPT), HumanMessage(state["question"])]
+            )
+        except Exception as error:  # a routing failure must never stop the request
+            logger.warning("Model router failed, using the word rules: %r", error)
+            decision = None
+        if not isinstance(decision, RouteDecision):
+            update = classify(state)
+            update["trail"] = mark("classify", f"Route: {update['route']} (rules fallback)")
+            return update
+        note = f"Route: {decision.route} (model: {decision.reason})"
+        return {"route": decision.route, "trail": mark("classify", note)}
 
     async def analyse(state: ResearchState) -> dict:
         """Reason: the model either asks for tools or writes a draft answer."""
@@ -155,7 +178,7 @@ def build_research_graph(model: BaseChatModel) -> CompiledStateGraph:
         output_schema=ResearchOutput,
     )
     builder.add_node("intake", intake)
-    builder.add_node("classify", classify)
+    builder.add_node("classify", choose_route)
     builder.add_node("analyse", analyse)
     builder.add_node("tools", ToolNode(PORTFOLIO_TOOLS))  # act: run the requested tools
     builder.add_node("explain", explain)

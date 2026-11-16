@@ -34,6 +34,17 @@ Set SB_LOAD_TEST_PASSWORD (12+ characters) in the terminal first.
     uv run python scripts/latency_report.py reports/lab20_stats.csv
     uv run python scripts/create_load_users.py --count 30 --disable
 
+## Research graph (Module 3)
+
+Stations: intake, classify (the model chooses the track; word rules as fallback),
+analyse and tools (ReAct loop), review (every figure checked, may send the draft back),
+explain (general questions). Set SB_RESEARCH_ROUTER=rules to route by the word rules only.
+
+    POST /v1/research            answer (cached)
+    POST /v1/research/stream     answer as Server-Sent Events
+    POST /v1/research/trace      answer with its audit trail
+    GET  /v1/graphs/research/state | /schema | /diagram
+
 ## Graph diagram (Lab 27)
 
 The research graph's diagram lives in docs/research_graph.md (GitHub draws it).

@@ -28,6 +28,8 @@ router = APIRouter(
 logger = logging.getLogger("sovereign_brain.research")
 # The output fields plus the audit trail: what the trace endpoint asks the graph for (Lab 26)
 TRACE_KEYS = ["answer", "route", "checked", "trail"]
+# The stations whose words are the answer; the router's model call is not streamed (Lab 30)
+ANSWER_NODES = {"analyse", "explain"}
 
 
 def get_research_graph(request: Request) -> CompiledStateGraph:
@@ -47,10 +49,12 @@ def research_context(
     user: CurrentUser, portfolio: Annotated[PortfolioService, Depends(get_portfolio)]
 ) -> ResearchContext:
     """What this run brings along: the services, the signed-in analyst, today's limits."""
+    settings = get_settings()
     return ResearchContext(
         portfolio=portfolio,
         analyst=user.username,
-        max_revisions=get_settings().max_revisions,
+        max_revisions=settings.max_revisions,
+        router=settings.research_router,
     )
 
 
@@ -158,9 +162,13 @@ async def stream_research(
             stream_mode=["updates", "messages"],
         ):
             if mode == "messages":
-                chunk, _metadata = payload
-                # Only the model's own words: nodes also return prompts and tool results
-                if isinstance(chunk, AIMessageChunk) and chunk.content:
+                chunk, metadata = payload
+                # Only the model's own words, and only from the answering stations
+                if (
+                    isinstance(chunk, AIMessageChunk)
+                    and chunk.content
+                    and metadata.get("langgraph_node") in ANSWER_NODES
+                ):
                     yield ServerSentEvent(event="token", data=chunk.content)
             else:
                 for node, update in payload.items():

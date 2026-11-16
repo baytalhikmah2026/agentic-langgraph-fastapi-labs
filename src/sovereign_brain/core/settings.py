@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     graph_recursion_limit: int = 25
     # Review loop (Lab 24): how often a draft may be sent back for correction
     max_revisions: int = 2
+    # Who chooses the research track (Lab 30): the model, or the word rules only
+    research_router: Literal["rules", "model"] = "model"
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"
