@@ -34,4 +34,11 @@ Set SB_LOAD_TEST_PASSWORD (12+ characters) in the terminal first.
     uv run python scripts/latency_report.py reports/lab20_stats.csv
     uv run python scripts/create_load_users.py --count 30 --disable
 
+## Graph diagram (Lab 27)
+
+The research graph's diagram lives in docs/research_graph.md (GitHub draws it).
+Run this after every change to the graph; a test fails while the page is out of date.
+
+    uv run python scripts/export_graph_diagram.py
+
 API documentation: http://127.0.0.1:8000/docs

@@ -1,9 +1,11 @@
 """Look inside the graphs that run behind the Research Desk."""
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import PlainTextResponse
 
 from sovereign_brain.api.v1.research import ResearchGraph
 from sovereign_brain.core.security import get_current_user
+from sovereign_brain.graphs.diagram import mermaid
 from sovereign_brain.graphs.introspection import describe_fields
 from sovereign_brain.graphs.research import ResearchState
 
@@ -21,3 +23,9 @@ async def research_state(graph: ResearchGraph) -> dict:
 async def research_schema(graph: ResearchGraph) -> dict:
     """The research graph's contract: what it accepts and what it returns (JSON Schema)."""
     return {"input": graph.get_input_jsonschema(), "output": graph.get_output_jsonschema()}
+
+
+@router.get("/research/diagram", response_class=PlainTextResponse)
+async def research_diagram(graph: ResearchGraph) -> str:
+    """The research graph as Mermaid text, drawn from the running code (Lab 27)."""
+    return mermaid(graph)
