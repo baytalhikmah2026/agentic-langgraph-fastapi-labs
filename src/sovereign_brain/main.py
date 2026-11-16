@@ -5,7 +5,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from langgraph.checkpoint.memory import InMemorySaver
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -20,6 +19,7 @@ from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
 from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.llm.factory import get_chat_model
+from sovereign_brain.memory.checkpoints import open_checkpointer
 from sovereign_brain.services.portfolio import PortfolioService
 
 logger = logging.getLogger("sovereign_brain")
@@ -35,12 +35,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.cache = ResearchCache(redis_client, settings.cache_ttl_seconds)
     # Services live on app.state and reach each run through its context (Lab 28)
     app.state.portfolio = PortfolioService(app.state.session_factory)
-    # Thread memory (Lab 31): kept in the API's memory, lost when the API restarts
-    app.state.research_graph = build_research_graph(
-        get_chat_model(settings), checkpointer=InMemorySaver()
-    )
-    logger.info("Research graph ready (model %s)", settings.llm_model)
-    yield
+    # Thread memory (Lab 32): the checkpointer stays open while the API runs
+    async with open_checkpointer(settings) as checkpointer:
+        app.state.research_graph = build_research_graph(
+            get_chat_model(settings), checkpointer=checkpointer
+        )
+        logger.info("Research graph ready (model %s)", settings.llm_model)
+        yield
     await redis_client.aclose()
     await engine.dispose()
     logger.info("Shutting down %s", settings.app_name)

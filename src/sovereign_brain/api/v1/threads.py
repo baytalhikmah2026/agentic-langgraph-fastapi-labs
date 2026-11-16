@@ -1,4 +1,4 @@
-"""Conversation threads: look at what the Research Desk remembers (Lab 31)."""
+"""Conversation threads: look at what the Research Desk remembers (Labs 31-32)."""
 
 from typing import Annotated
 
@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sovereign_brain.api.v1.research import ResearchGraph
 from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.memory.threads import THREAD_ID_PATTERN, thread_config, thread_key
-from sovereign_brain.schemas.thread import ThreadSnapshot
+from sovereign_brain.schemas.thread import ThreadMessage, ThreadSnapshot
 
 router = APIRouter(prefix="/v1/threads", tags=["threads"], dependencies=[Depends(get_current_user)])
 
@@ -36,3 +36,18 @@ async def read_thread(
         step=snapshot.metadata["step"],
         updated_at=snapshot.created_at,
     )
+
+
+@router.get("/{thread_id}/messages")
+async def read_thread_messages(
+    thread_id: ThreadId, graph: ResearchGraph, user: CurrentUser
+) -> list[ThreadMessage]:
+    """The conversation of one of your threads, read back from the checkpointer (Lab 32)."""
+    snapshot = await graph.aget_state(thread_config(thread_key(user.username, thread_id)))
+    if not snapshot.values:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Thread {thread_id} not found")
+    return [
+        ThreadMessage(type=m.type, content=str(m.content))
+        for m in snapshot.values["messages"]
+        if m.type != "system" and (m.content or m.type != "ai")  # no prompt, no empty tool requests
+    ]

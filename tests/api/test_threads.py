@@ -37,3 +37,19 @@ def test_an_unknown_thread_is_404(client: TestClient, auth_headers: dict[str, st
 
     assert response.status_code == 404
     assert response.json()["message"] == "Thread nothing-here not found"
+
+
+def test_the_conversation_can_be_read_back(
+    client: TestClient, auth_headers: dict[str, str], fake_answer: str
+) -> None:
+    first = {**REQUEST, "thread_id": "read-back"}
+    client.post("/v1/research", json=first, headers=auth_headers)
+    client.post("/v1/research", json={**first, "question": "What is a bond?"}, headers=auth_headers)
+
+    response = client.get("/v1/threads/read-back/messages", headers=auth_headers)
+
+    assert response.status_code == 200
+    messages = response.json()
+    assert [m["type"] for m in messages] == ["human", "ai", "human", "ai"]
+    assert messages[0]["content"].endswith("Summarise the exposure to energy stocks.")
+    assert messages[1]["content"] == fake_answer
