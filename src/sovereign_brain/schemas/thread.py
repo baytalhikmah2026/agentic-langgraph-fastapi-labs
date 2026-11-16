@@ -1,6 +1,6 @@
-"""What the API shows about a conversation thread (Lab 31)."""
+"""What the API shows about a conversation thread (Labs 31-36)."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ThreadSnapshot(BaseModel):
@@ -24,3 +24,22 @@ class ThreadMessage(BaseModel):
 
     type: str  # human, ai or tool
     content: str
+
+
+class CheckpointSummary(BaseModel):
+    """One saved checkpoint of a thread: one page of its history (Lab 36)."""
+
+    checkpoint_id: str
+    parent_checkpoint_id: str | None = None  # the checkpoint this one was made from
+    step: int  # -1 = the input, 0 = the start, then one per finished step
+    source: str  # input, loop, update or fork
+    next: list[str]  # stations due after this checkpoint; empty = end of a run
+    messages: int
+    answer: str | None = None
+    created_at: str
+
+
+class RewindRequest(BaseModel):
+    """Which checkpoint to go back to: one of the IDs from the history."""
+
+    checkpoint_id: str = Field(min_length=1, max_length=64)

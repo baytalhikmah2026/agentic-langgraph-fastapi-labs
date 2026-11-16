@@ -1,10 +1,10 @@
-"""Conversation threads: look at what the Research Desk remembers (Labs 31-35)."""
+"""Conversation threads: look at what the Research Desk remembers (Labs 31-36)."""
 
 import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 
 from sovereign_brain.api.v1.research import Registry, ResearchGraph, RunContext, run_config
 from sovereign_brain.core.rate_limit import model_call_gate
@@ -12,7 +12,12 @@ from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.memory.threads import THREAD_ID_PATTERN, thread_config, thread_key
 from sovereign_brain.schemas.research import ResearchResponse
-from sovereign_brain.schemas.thread import ThreadMessage, ThreadSnapshot
+from sovereign_brain.schemas.thread import (
+    CheckpointSummary,
+    RewindRequest,
+    ThreadMessage,
+    ThreadSnapshot,
+)
 
 router = APIRouter(prefix="/v1/threads", tags=["threads"], dependencies=[Depends(get_current_user)])
 logger = logging.getLogger("sovereign_brain.research")
@@ -82,6 +87,82 @@ async def resume_thread(
     logger.info("Resuming thread %s at %s", thread_id, ", ".join(snapshot.next))
     await registry.touch(key, user.username, thread_id, client_id)
     # No input: LangGraph continues from the saved checkpoint instead of starting again
+    result = await graph.ainvoke(None, config=config, context=context)
+    return ResearchResponse(
+        request_id=get_request_id(),
+        client_id=client_id,
+        status="completed",
+        summary=result["answer"],
+        route=result["route"],
+        checked=result.get("checked"),
+        thread_id=thread_id,
+        created_at=datetime.now(UTC),
+    )
+
+
+@router.get("/{thread_id}/history")
+async def read_thread_history(
+    thread_id: ThreadId,
+    graph: ResearchGraph,
+    user: CurrentUser,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> list[CheckpointSummary]:
+    """Every saved checkpoint of one of your threads, newest first (Lab 36)."""
+    config = thread_config(thread_key(user.username, thread_id))
+    history = [
+        CheckpointSummary(
+            checkpoint_id=snapshot.config["configurable"]["checkpoint_id"],
+            parent_checkpoint_id=(
+                snapshot.parent_config["configurable"]["checkpoint_id"]
+                if snapshot.parent_config
+                else None
+            ),
+            step=snapshot.metadata["step"],
+            source=snapshot.metadata["source"],
+            next=list(snapshot.next),
+            messages=len(snapshot.values.get("messages", [])),
+            answer=snapshot.values.get("answer"),
+            created_at=snapshot.created_at,
+        )
+        async for snapshot in graph.aget_state_history(config, limit=limit)
+    ]
+    if not history:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Thread {thread_id} not found")
+    return history
+
+
+@router.post("/{thread_id}/rewind", dependencies=[Depends(model_call_gate)])
+async def rewind_thread(
+    thread_id: ThreadId,
+    body: RewindRequest,
+    graph: ResearchGraph,
+    user: CurrentUser,
+    context: RunContext,
+    registry: Registry,
+) -> ResearchResponse:
+    """Go back to an earlier checkpoint and run again from there (Lab 36).
+
+    The stations after that checkpoint run again; the new run becomes the thread's latest
+    state, and the old checkpoints stay in the history.
+    """
+    key = thread_key(user.username, thread_id)
+    config = run_config(key)
+    config["configurable"]["checkpoint_id"] = body.checkpoint_id
+    snapshot = await graph.aget_state(config)
+    if not snapshot.values:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Checkpoint {body.checkpoint_id} not found in thread {thread_id}",
+        )
+    if not snapshot.next:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Checkpoint {body.checkpoint_id} is the end of a run; nothing to run again",
+        )
+    client_id = snapshot.values["client_id"]
+    logger.info("Rewinding thread %s to step %s", thread_id, snapshot.metadata["step"])
+    await registry.touch(key, user.username, thread_id, client_id)
+    # No input + a checkpoint_id: LangGraph starts a new branch from that checkpoint
     result = await graph.ainvoke(None, config=config, context=context)
     return ResearchResponse(
         request_id=get_request_id(),
