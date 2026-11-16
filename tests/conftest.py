@@ -1,4 +1,4 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-25)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-28)."""
 
 import asyncio
 import itertools
@@ -14,7 +14,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from sovereign_brain.api.v1.research import get_research_graph
+from sovereign_brain.api.v1.research import get_portfolio, get_research_graph
 from sovereign_brain.core.cache import ResearchCache
 from sovereign_brain.core.rate_limit import limiter
 from sovereign_brain.core.security import hash_password
@@ -130,9 +130,11 @@ def app(database_url: str) -> FastAPI:
             yield session
 
     model = FakeToolModel(messages=itertools.cycle([AIMessage(FAKE_ANSWER)]))
-    graph = build_research_graph(model, PortfolioService(sessions))
+    graph = build_research_graph(model)
+    portfolio = PortfolioService(sessions)
     application.dependency_overrides[get_session] = test_session
     application.dependency_overrides[get_research_graph] = lambda: graph
+    application.dependency_overrides[get_portfolio] = lambda: portfolio
     return application
 
 

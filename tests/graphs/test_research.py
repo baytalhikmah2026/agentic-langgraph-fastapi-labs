@@ -5,7 +5,9 @@ from typing import get_type_hints
 import pytest
 from langchain_core.messages import AIMessage
 from langgraph.errors import GraphRecursionError
+from langgraph.runtime import Runtime
 
+from sovereign_brain.graphs.context import ResearchContext
 from sovereign_brain.graphs.research import ResearchState, build_research_graph, intake
 from sovereign_brain.graphs.trail import stations
 
@@ -46,11 +48,15 @@ class StubPortfolio:
         }
 
 
+# What the API would bring along for amina; the portfolio is the stub above
+CONTEXT = ResearchContext(portfolio=StubPortfolio(), analyst="amina", max_revisions=2)
+
+
 def test_intake_writes_the_first_messages() -> None:
-    update = intake(REQUEST)
+    update = intake(REQUEST, Runtime(context=CONTEXT))
 
     assert stations(update["trail"]) == ["intake"]
-    assert update["trail"][0]["note"] == "Request received for C-1042"
+    assert update["trail"][0]["note"] == "Request received for C-1042 from amina"
     assert update["status"] == "received"
     assert update["revisions"] == 0
     assert update["messages"][1].content == (
@@ -61,9 +67,9 @@ def test_intake_writes_the_first_messages() -> None:
 
 async def test_reducers_append_the_trail_and_overwrite_status(make_model: Callable) -> None:
     model = make_model([AIMessage("Energy is a modest part of the portfolio.")])
-    graph = build_research_graph(model, StubPortfolio())
+    graph = build_research_graph(model)
 
-    result = await graph.ainvoke(REQUEST, output_keys=EVERYTHING)
+    result = await graph.ainvoke(REQUEST, context=CONTEXT, output_keys=EVERYTHING)
 
     assert stations(result["trail"]) == ["intake", "classify", "analyse", "review"]
     assert [entry["note"] for entry in result["trail"][1:]] == [
@@ -78,9 +84,9 @@ async def test_reducers_append_the_trail_and_overwrite_status(make_model: Callab
 
 async def test_the_agent_calls_a_tool_then_answers(make_model: Callable) -> None:
     model = make_model([TOOL_CALL, RIGHT])
-    graph = build_research_graph(model, StubPortfolio())
+    graph = build_research_graph(model)
 
-    result = await graph.ainvoke(REQUEST, output_keys=EVERYTHING)
+    result = await graph.ainvoke(REQUEST, context=CONTEXT, output_keys=EVERYTHING)
 
     assert stations(result["trail"]) == ["intake", "classify", "analyse", "analyse", "review"]
     assert result["trail"][2]["note"] == "Asked for tools: sector_exposure"
@@ -93,9 +99,9 @@ async def test_the_agent_calls_a_tool_then_answers(make_model: Callable) -> None
 
 async def test_a_wrong_figure_is_sent_back_and_corrected(make_model: Callable) -> None:
     model = make_model([TOOL_CALL, WRONG, RIGHT])
-    graph = build_research_graph(model, StubPortfolio())
+    graph = build_research_graph(model)
 
-    result = await graph.ainvoke(REQUEST, output_keys=EVERYTHING)
+    result = await graph.ainvoke(REQUEST, context=CONTEXT, output_keys=EVERYTHING)
 
     assert stations(result["trail"]) == [
         "intake", "classify", "analyse", "analyse", "review", "analyse", "review",
@@ -111,10 +117,10 @@ async def test_a_wrong_figure_is_sent_back_and_corrected(make_model: Callable) -
 
 async def test_the_review_gives_up_after_the_limit(make_model: Callable) -> None:
     model = make_model(itertools.cycle([WRONG]))  # always the same wrong figure
-    graph = build_research_graph(model, StubPortfolio(), max_revisions=2)
+    graph = build_research_graph(model)
 
     result = await graph.ainvoke(
-        REQUEST, config={"recursion_limit": 12}, output_keys=EVERYTHING
+        REQUEST, config={"recursion_limit": 12}, context=CONTEXT, output_keys=EVERYTHING
     )
 
     assert result["revisions"] == 2
@@ -126,18 +132,20 @@ async def test_the_review_gives_up_after_the_limit(make_model: Callable) -> None
 
 async def test_the_recursion_limit_stops_a_runaway_loop(make_model: Callable) -> None:
     model = make_model(itertools.cycle([TOOL_CALL]))  # asks for the tool forever
-    graph = build_research_graph(model, StubPortfolio())
+    graph = build_research_graph(model)
 
     with pytest.raises(GraphRecursionError):
-        await graph.ainvoke(REQUEST, config={"recursion_limit": 12})
+        await graph.ainvoke(REQUEST, config={"recursion_limit": 12}, context=CONTEXT)
 
 
 async def test_a_general_question_takes_the_explain_track(make_model: Callable) -> None:
     model = make_model([AIMessage("A moderate profile accepts some ups and downs.")])
-    graph = build_research_graph(model, StubPortfolio())
+    graph = build_research_graph(model)
     question = "What does a moderate risk profile mean?"
 
-    result = await graph.ainvoke({**REQUEST, "question": question}, output_keys=EVERYTHING)
+    result = await graph.ainvoke(
+        {**REQUEST, "question": question}, context=CONTEXT, output_keys=EVERYTHING
+    )
 
     assert result["route"] == "general"
     assert stations(result["trail"]) == ["intake", "classify", "explain"]
@@ -145,9 +153,9 @@ async def test_a_general_question_takes_the_explain_track(make_model: Callable) 
 
 
 async def test_callers_receive_only_the_output_fields(make_model: Callable) -> None:
-    graph = build_research_graph(make_model([TOOL_CALL, RIGHT]), StubPortfolio())
+    graph = build_research_graph(make_model([TOOL_CALL, RIGHT]))
 
-    result = await graph.ainvoke(REQUEST)
+    result = await graph.ainvoke(REQUEST, context=CONTEXT)
 
     assert result == {
         "answer": "Energy is 18.5% of the portfolio.",
@@ -157,9 +165,20 @@ async def test_callers_receive_only_the_output_fields(make_model: Callable) -> N
 
 
 async def test_fields_outside_the_input_schema_are_ignored(make_model: Callable) -> None:
-    graph = build_research_graph(make_model([AIMessage("A bond is a loan.")]), StubPortfolio())
+    graph = build_research_graph(make_model([AIMessage("A bond is a loan.")]))
     forged = {**REQUEST, "question": "What is a bond?", "checked": True, "revisions": 9}
 
-    result = await graph.ainvoke(forged)
+    result = await graph.ainvoke(forged, context=CONTEXT)
 
     assert result == {"answer": "A bond is a loan.", "route": "general"}
+
+
+async def test_each_run_brings_its_own_revision_limit(make_model: Callable) -> None:
+    graph = build_research_graph(make_model([TOOL_CALL, WRONG]))
+    strict = ResearchContext(portfolio=StubPortfolio(), analyst="amina", max_revisions=0)
+
+    result = await graph.ainvoke(REQUEST, context=strict, output_keys=EVERYTHING)
+
+    assert result["revisions"] == 0
+    assert result["checked"] is False
+    assert result["trail"][-1]["note"] == "Gave up after 0 revisions, unsupported: 25"

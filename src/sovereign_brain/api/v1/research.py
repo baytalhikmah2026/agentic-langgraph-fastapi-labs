@@ -15,10 +15,12 @@ from sovereign_brain.core.cache import Cache
 from sovereign_brain.core.errors import MODEL_ERRORS
 from sovereign_brain.core.rate_limit import model_call_gate
 from sovereign_brain.core.request_id import get_request_id
-from sovereign_brain.core.security import get_current_user
+from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
+from sovereign_brain.graphs.context import ResearchContext
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
+from sovereign_brain.services.portfolio import PortfolioService
 
 router = APIRouter(
     prefix="/v1/research", tags=["research"], dependencies=[Depends(get_current_user)]
@@ -34,6 +36,25 @@ def get_research_graph(request: Request) -> CompiledStateGraph:
 
 
 ResearchGraph = Annotated[CompiledStateGraph, Depends(get_research_graph)]
+
+
+def get_portfolio(request: Request) -> PortfolioService:
+    """The portfolio service created at start-up (see lifespan in main.py)."""
+    return request.app.state.portfolio
+
+
+def research_context(
+    user: CurrentUser, portfolio: Annotated[PortfolioService, Depends(get_portfolio)]
+) -> ResearchContext:
+    """What this run brings along: the services, the signed-in analyst, today's limits."""
+    return ResearchContext(
+        portfolio=portfolio,
+        analyst=user.username,
+        max_revisions=get_settings().max_revisions,
+    )
+
+
+RunContext = Annotated[ResearchContext, Depends(research_context)]
 
 
 @dataclass
@@ -69,7 +90,7 @@ def run_config() -> dict:
 
 @router.post("", dependencies=[Depends(model_call_gate)])
 async def submit_research(
-    checked: Checked, graph: ResearchGraph, cache: Cache
+    checked: Checked, graph: ResearchGraph, context: RunContext, cache: Cache
 ) -> ResearchResponse:
     client_id, question = checked.body.client_id, checked.body.question
     result = await cache.get(client_id, question)
@@ -79,7 +100,9 @@ async def submit_research(
     else:
         logger.info("Research started for %s", client_id)
         # The output schema returns only answer, route and checked
-        result = await graph.ainvoke(checked.graph_input, config=run_config())
+        result = await graph.ainvoke(
+            checked.graph_input, config=run_config(), context=context
+        )
         await cache.set(client_id, question, result)
         logger.info("Research finished for %s", client_id)
     return ResearchResponse(
@@ -95,12 +118,14 @@ async def submit_research(
 
 
 @router.post("/trace", dependencies=[Depends(model_call_gate)])
-async def trace_research(checked: Checked, graph: ResearchGraph) -> ResearchTrace:
+async def trace_research(
+    checked: Checked, graph: ResearchGraph, context: RunContext
+) -> ResearchTrace:
     """The same research, answered together with its audit trail (never cached)."""
     client_id = checked.body.client_id
     logger.info("Traced research started for %s", client_id)
     result = await graph.ainvoke(
-        checked.graph_input, config=run_config(), output_keys=TRACE_KEYS
+        checked.graph_input, config=run_config(), context=context, output_keys=TRACE_KEYS
     )
     logger.info("Traced research finished for %s", client_id)
     return ResearchTrace(
@@ -118,7 +143,7 @@ async def trace_research(checked: Checked, graph: ResearchGraph) -> ResearchTrac
     "/stream", response_class=EventSourceResponse, dependencies=[Depends(model_call_gate)]
 )
 async def stream_research(
-    checked: Checked, graph: ResearchGraph
+    checked: Checked, graph: ResearchGraph, context: RunContext
 ) -> AsyncIterator[ServerSentEvent]:
     """The same research, streamed as Server-Sent Events while the model writes."""
     request_id = get_request_id()
@@ -127,7 +152,10 @@ async def stream_research(
     )
     try:
         async for mode, payload in graph.astream(
-            checked.graph_input, config=run_config(), stream_mode=["updates", "messages"]
+            checked.graph_input,
+            config=run_config(),
+            context=context,
+            stream_mode=["updates", "messages"],
         ):
             if mode == "messages":
                 chunk, _metadata = payload

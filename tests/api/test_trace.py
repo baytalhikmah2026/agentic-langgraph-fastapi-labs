@@ -12,6 +12,7 @@ def test_the_trace_lists_every_station_in_order(
     body = response.json()
     assert body["summary"] == fake_answer
     assert [step["node"] for step in body["trail"]] == ["intake", "classify", "analyse", "review"]
+    assert body["trail"][0]["note"] == "Request received for C-1042 from amina"
     assert body["trail"][1]["note"] == "Route: portfolio"
     times = [step["at"] for step in body["trail"]]
     assert times == sorted(times)

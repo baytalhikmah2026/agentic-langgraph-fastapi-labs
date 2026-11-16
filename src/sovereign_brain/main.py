@@ -32,10 +32,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.session_factory = async_sessionmaker(engine, expire_on_commit=False)
     redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.cache = ResearchCache(redis_client, settings.cache_ttl_seconds)
-    portfolio = PortfolioService(app.state.session_factory)
-    app.state.research_graph = build_research_graph(
-        get_chat_model(settings), portfolio, settings.max_revisions
-    )
+    # Services live on app.state and reach each run through its context (Lab 28)
+    app.state.portfolio = PortfolioService(app.state.session_factory)
+    app.state.research_graph = build_research_graph(get_chat_model(settings))
     logger.info("Research graph ready (model %s)", settings.llm_model)
     yield
     await redis_client.aclose()

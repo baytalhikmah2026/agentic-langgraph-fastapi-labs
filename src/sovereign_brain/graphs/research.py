@@ -6,6 +6,7 @@ Lab 23: classify picks a track: portfolio questions to analyse, general question
 Lab 24: review checks every figure of a portfolio answer and sends the draft back if needed.
 Lab 25: input and output schemas: callers send three fields and receive only the answer fields.
 Lab 26: an append-only audit trail: every station adds what it decided and when.
+Lab 28: services and limits arrive with each run (context_schema), not at build time.
 """
 
 import operator
@@ -17,12 +18,13 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.runtime import Runtime
 
+from sovereign_brain.graphs.context import ResearchContext
 from sovereign_brain.graphs.review import unsupported_figures
 from sovereign_brain.graphs.routing import Route, classify_question
 from sovereign_brain.graphs.trail import TrailEntry, mark
-from sovereign_brain.services.portfolio import PortfolioService
-from sovereign_brain.tools.portfolio import build_portfolio_tools
+from sovereign_brain.tools.portfolio import PORTFOLIO_TOOLS
 
 RESEARCH_PROMPT = (
     "You are an analyst on the Research Desk of Crescent Ledger Bank. "
@@ -61,12 +63,13 @@ class ResearchState(ResearchInput):
     checked: bool  # overwritten: True when every figure was found in the tool results
 
 
-def intake(state: ResearchState) -> dict:
+def intake(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
     """Turn the request into the first messages for the model (no AI in this step)."""
     brief = f"Client {state['client_id']} ({state['client_profile']}): {state['question']}"
+    note = f"Request received for {state['client_id']} from {runtime.context.analyst}"
     return {
         "messages": [SystemMessage(RESEARCH_PROMPT), HumanMessage(brief)],
-        "trail": mark("intake", f"Request received for {state['client_id']}"),
+        "trail": mark("intake", note),
         "status": "received",
         "revisions": 0,
     }
@@ -93,11 +96,34 @@ def after_review(state: ResearchState) -> Literal["revise", "done"]:
     return "revise" if state["status"] == "revising" else "done"
 
 
-def build_research_graph(
-    model: BaseChatModel, portfolio: PortfolioService, max_revisions: int = 2
-) -> CompiledStateGraph:
-    tools = build_portfolio_tools(portfolio)
-    model_with_tools = model.bind_tools(tools)
+def review(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
+    """Check the draft: every figure must appear in the tool results or the brief."""
+    sources = " ".join(str(m.content) for m in state["messages"] if is_source(m))
+    unsupported = unsupported_figures(state["answer"], sources)
+    if not unsupported:
+        note = "Every figure is supported by the tool results"
+        return {"trail": mark("review", note), "status": "answered", "checked": True}
+    figures = ", ".join(unsupported)
+    limit = runtime.context.max_revisions
+    if state["revisions"] >= limit:
+        note = f"Gave up after {limit} revisions, unsupported: {figures}"
+        return {"trail": mark("review", note), "status": "answered", "checked": False}
+    correction = HumanMessage(
+        "Revise your answer. These figures are not in the tool results: "
+        f"{figures}. Quote only figures returned by the tools.",
+        name="reviewer",
+    )
+    return {
+        "messages": [correction],
+        "trail": mark("review", f"Sent back, unsupported: {figures}"),
+        "status": "revising",
+        "revisions": state["revisions"] + 1,
+    }
+
+
+def build_research_graph(model: BaseChatModel) -> CompiledStateGraph:
+    """Built once at start-up; each run brings its own ResearchContext."""
+    model_with_tools = model.bind_tools(PORTFOLIO_TOOLS)
 
     async def analyse(state: ResearchState) -> dict:
         """Reason: the model either asks for tools or writes a draft answer."""
@@ -112,29 +138,6 @@ def build_research_graph(
             "answer": str(reply.content),
         }
 
-    def review(state: ResearchState) -> dict:
-        """Check the draft: every figure must appear in the tool results or the brief."""
-        sources = " ".join(str(m.content) for m in state["messages"] if is_source(m))
-        unsupported = unsupported_figures(state["answer"], sources)
-        if not unsupported:
-            note = "Every figure is supported by the tool results"
-            return {"trail": mark("review", note), "status": "answered", "checked": True}
-        figures = ", ".join(unsupported)
-        if state["revisions"] >= max_revisions:
-            note = f"Gave up after {max_revisions} revisions, unsupported: {figures}"
-            return {"trail": mark("review", note), "status": "answered", "checked": False}
-        note = HumanMessage(
-            "Revise your answer. These figures are not in the tool results: "
-            f"{figures}. Quote only figures returned by the tools.",
-            name="reviewer",
-        )
-        return {
-            "messages": [note],
-            "trail": mark("review", f"Sent back, unsupported: {figures}"),
-            "status": "revising",
-            "revisions": state["revisions"] + 1,
-        }
-
     async def explain(state: ResearchState) -> dict:
         """Answer a general question directly: no tools, one model call."""
         reply = await model.ainvoke(state["messages"])
@@ -145,11 +148,16 @@ def build_research_graph(
             "answer": str(reply.content),
         }
 
-    builder = StateGraph(ResearchState, input_schema=ResearchInput, output_schema=ResearchOutput)
+    builder = StateGraph(
+        ResearchState,
+        context_schema=ResearchContext,
+        input_schema=ResearchInput,
+        output_schema=ResearchOutput,
+    )
     builder.add_node("intake", intake)
     builder.add_node("classify", classify)
     builder.add_node("analyse", analyse)
-    builder.add_node("tools", ToolNode(tools))  # act: run the requested tools
+    builder.add_node("tools", ToolNode(PORTFOLIO_TOOLS))  # act: run the requested tools
     builder.add_node("explain", explain)
     builder.add_node("review", review)
     builder.add_edge(START, "intake")
