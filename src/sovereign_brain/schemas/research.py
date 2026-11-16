@@ -33,3 +33,23 @@ class ResearchResponse(BaseModel):
     checked: bool | None = None  # portfolio answers: were all figures found? (Lab 25)
     cached: bool = False
     created_at: datetime
+
+
+class TrailStep(BaseModel):
+    """One entry of the audit trail: a station, what it decided, and when."""
+
+    node: str
+    note: str
+    at: datetime
+
+
+class ResearchTrace(BaseModel):
+    """A research answer together with its full audit trail (Lab 26)."""
+
+    request_id: str
+    client_id: str
+    summary: str
+    route: Literal["general", "portfolio"]
+    checked: bool | None = None
+    trail: list[TrailStep]
+    created_at: datetime

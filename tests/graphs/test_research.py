@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage
 from langgraph.errors import GraphRecursionError
 
 from sovereign_brain.graphs.research import ResearchState, build_research_graph, intake
+from sovereign_brain.graphs.trail import stations
 
 REQUEST = {
     "client_id": "C-1042",
@@ -48,7 +49,8 @@ class StubPortfolio:
 def test_intake_writes_the_first_messages() -> None:
     update = intake(REQUEST)
 
-    assert update["steps"] == ["intake"]
+    assert stations(update["trail"]) == ["intake"]
+    assert update["trail"][0]["note"] == "Request received for C-1042"
     assert update["status"] == "received"
     assert update["revisions"] == 0
     assert update["messages"][1].content == (
@@ -57,13 +59,18 @@ def test_intake_writes_the_first_messages() -> None:
     )
 
 
-async def test_reducers_append_steps_and_overwrite_status(make_model: Callable) -> None:
+async def test_reducers_append_the_trail_and_overwrite_status(make_model: Callable) -> None:
     model = make_model([AIMessage("Energy is a modest part of the portfolio.")])
     graph = build_research_graph(model, StubPortfolio())
 
     result = await graph.ainvoke(REQUEST, output_keys=EVERYTHING)
 
-    assert result["steps"] == ["intake", "classify", "analyse", "review"]
+    assert stations(result["trail"]) == ["intake", "classify", "analyse", "review"]
+    assert [entry["note"] for entry in result["trail"][1:]] == [
+        "Route: portfolio",
+        "Draft answer written",
+        "Every figure is supported by the tool results",
+    ]
     assert result["status"] == "answered"
     assert result["answer"] == "Energy is a modest part of the portfolio."
     assert [message.type for message in result["messages"]] == ["system", "human", "ai"]
@@ -75,7 +82,8 @@ async def test_the_agent_calls_a_tool_then_answers(make_model: Callable) -> None
 
     result = await graph.ainvoke(REQUEST, output_keys=EVERYTHING)
 
-    assert result["steps"] == ["intake", "classify", "analyse", "analyse", "review"]
+    assert stations(result["trail"]) == ["intake", "classify", "analyse", "analyse", "review"]
+    assert result["trail"][2]["note"] == "Asked for tools: sector_exposure"
     types = [message.type for message in result["messages"]]
     assert types == ["system", "human", "ai", "tool", "ai"]
     assert '"percent": 18.5' in result["messages"][3].content
@@ -89,9 +97,10 @@ async def test_a_wrong_figure_is_sent_back_and_corrected(make_model: Callable) -
 
     result = await graph.ainvoke(REQUEST, output_keys=EVERYTHING)
 
-    assert result["steps"] == [
+    assert stations(result["trail"]) == [
         "intake", "classify", "analyse", "analyse", "review", "analyse", "review",
     ]
+    assert result["trail"][4]["note"] == "Sent back, unsupported: 25"
     note = result["messages"][5]
     assert note.name == "reviewer"
     assert "25" in note.content
@@ -109,7 +118,8 @@ async def test_the_review_gives_up_after_the_limit(make_model: Callable) -> None
     )
 
     assert result["revisions"] == 2
-    assert result["steps"].count("review") == 3
+    assert stations(result["trail"]).count("review") == 3
+    assert result["trail"][-1]["note"] == "Gave up after 2 revisions, unsupported: 25"
     assert result["status"] == "answered"
     assert result["checked"] is False
 
@@ -130,7 +140,7 @@ async def test_a_general_question_takes_the_explain_track(make_model: Callable) 
     result = await graph.ainvoke({**REQUEST, "question": question}, output_keys=EVERYTHING)
 
     assert result["route"] == "general"
-    assert result["steps"] == ["intake", "classify", "explain"]
+    assert stations(result["trail"]) == ["intake", "classify", "explain"]
     assert result["answer"] == "A moderate profile accepts some ups and downs."
 
 

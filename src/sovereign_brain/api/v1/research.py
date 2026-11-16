@@ -18,12 +18,14 @@ from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.security import get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
-from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse
+from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
 
 router = APIRouter(
     prefix="/v1/research", tags=["research"], dependencies=[Depends(get_current_user)]
 )
 logger = logging.getLogger("sovereign_brain.research")
+# The output fields plus the audit trail: what the trace endpoint asks the graph for (Lab 26)
+TRACE_KEYS = ["answer", "route", "checked", "trail"]
 
 
 def get_research_graph(request: Request) -> CompiledStateGraph:
@@ -88,6 +90,26 @@ async def submit_research(
         route=result["route"],
         checked=result.get("checked"),
         cached=cached,
+        created_at=datetime.now(UTC),
+    )
+
+
+@router.post("/trace", dependencies=[Depends(model_call_gate)])
+async def trace_research(checked: Checked, graph: ResearchGraph) -> ResearchTrace:
+    """The same research, answered together with its audit trail (never cached)."""
+    client_id = checked.body.client_id
+    logger.info("Traced research started for %s", client_id)
+    result = await graph.ainvoke(
+        checked.graph_input, config=run_config(), output_keys=TRACE_KEYS
+    )
+    logger.info("Traced research finished for %s", client_id)
+    return ResearchTrace(
+        request_id=get_request_id(),
+        client_id=client_id,
+        summary=result["answer"],
+        route=result["route"],
+        checked=result.get("checked"),
+        trail=result["trail"],
         created_at=datetime.now(UTC),
     )
 

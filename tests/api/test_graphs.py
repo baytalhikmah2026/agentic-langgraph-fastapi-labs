@@ -11,7 +11,7 @@ def test_the_research_state_is_described(
     assert body["graph"] == "research"
     assert body["nodes"] == ["intake", "classify", "analyse", "tools", "explain", "review"]
     assert body["fields"]["messages"] == "append (add_messages)"
-    assert body["fields"]["steps"] == "append (add)"
+    assert body["fields"]["trail"] == "append (add)"
     assert body["fields"]["status"] == "overwrite"
 
 

@@ -5,6 +5,7 @@ Lab 22: analyse can call portfolio tools in a loop (the ReAct pattern).
 Lab 23: classify picks a track: portfolio questions to analyse, general questions to explain.
 Lab 24: review checks every figure of a portfolio answer and sends the draft back if needed.
 Lab 25: input and output schemas: callers send three fields and receive only the answer fields.
+Lab 26: an append-only audit trail: every station adds what it decided and when.
 """
 
 import operator
@@ -19,6 +20,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from sovereign_brain.graphs.review import unsupported_figures
 from sovereign_brain.graphs.routing import Route, classify_question
+from sovereign_brain.graphs.trail import TrailEntry, mark
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.portfolio import build_portfolio_tools
 
@@ -51,7 +53,7 @@ class ResearchState(ResearchInput):
     """Everything the graph knows about one research request (the input fields, plus these)."""
 
     messages: Annotated[list[AnyMessage], add_messages]  # appended: the talk with the model
-    steps: Annotated[list[str], operator.add]  # appended: which stations the request passed
+    trail: Annotated[list[TrailEntry], operator.add]  # appended: what each station did (Lab 26)
     route: Route  # overwritten: general or portfolio (Lab 23)
     status: Literal["received", "drafted", "revising", "answered"]  # overwritten
     answer: str  # overwritten: the latest answer
@@ -64,7 +66,7 @@ def intake(state: ResearchState) -> dict:
     brief = f"Client {state['client_id']} ({state['client_profile']}): {state['question']}"
     return {
         "messages": [SystemMessage(RESEARCH_PROMPT), HumanMessage(brief)],
-        "steps": ["intake"],
+        "trail": mark("intake", f"Request received for {state['client_id']}"),
         "status": "received",
         "revisions": 0,
     }
@@ -72,7 +74,8 @@ def intake(state: ResearchState) -> dict:
 
 def classify(state: ResearchState) -> dict:
     """Read the question and choose a track (rules only, no AI in this step)."""
-    return {"route": classify_question(state["question"]), "steps": ["classify"]}
+    route = classify_question(state["question"])
+    return {"route": route, "trail": mark("classify", f"Route: {route}")}
 
 
 def pick_track(state: ResearchState) -> Route:
@@ -99,27 +102,35 @@ def build_research_graph(
     async def analyse(state: ResearchState) -> dict:
         """Reason: the model either asks for tools or writes a draft answer."""
         reply = await model_with_tools.ainvoke(state["messages"])
-        update = {"messages": [reply], "steps": ["analyse"]}
-        if not reply.tool_calls:
-            update |= {"status": "drafted", "answer": str(reply.content)}
-        return update
+        if reply.tool_calls:
+            names = ", ".join(call["name"] for call in reply.tool_calls)
+            return {"messages": [reply], "trail": mark("analyse", f"Asked for tools: {names}")}
+        return {
+            "messages": [reply],
+            "trail": mark("analyse", "Draft answer written"),
+            "status": "drafted",
+            "answer": str(reply.content),
+        }
 
     def review(state: ResearchState) -> dict:
         """Check the draft: every figure must appear in the tool results or the brief."""
         sources = " ".join(str(m.content) for m in state["messages"] if is_source(m))
         unsupported = unsupported_figures(state["answer"], sources)
         if not unsupported:
-            return {"steps": ["review"], "status": "answered", "checked": True}
+            note = "Every figure is supported by the tool results"
+            return {"trail": mark("review", note), "status": "answered", "checked": True}
+        figures = ", ".join(unsupported)
         if state["revisions"] >= max_revisions:
-            return {"steps": ["review"], "status": "answered", "checked": False}
+            note = f"Gave up after {max_revisions} revisions, unsupported: {figures}"
+            return {"trail": mark("review", note), "status": "answered", "checked": False}
         note = HumanMessage(
             "Revise your answer. These figures are not in the tool results: "
-            f"{', '.join(unsupported)}. Quote only figures returned by the tools.",
+            f"{figures}. Quote only figures returned by the tools.",
             name="reviewer",
         )
         return {
             "messages": [note],
-            "steps": ["review"],
+            "trail": mark("review", f"Sent back, unsupported: {figures}"),
             "status": "revising",
             "revisions": state["revisions"] + 1,
         }
@@ -129,7 +140,7 @@ def build_research_graph(
         reply = await model.ainvoke(state["messages"])
         return {
             "messages": [reply],
-            "steps": ["explain"],
+            "trail": mark("explain", "General answer written"),
             "status": "answered",
             "answer": str(reply.content),
         }
