@@ -29,9 +29,10 @@ class Settings(BaseSettings):
     # Who chooses the research track (Lab 30): the model, or the word rules only
     research_router: Literal["rules", "model"] = "model"
 
-    # Conversation memory (Labs 31-32): where thread checkpoints are kept
-    checkpoint_store: Literal["memory", "sqlite"] = "memory"
+    # Conversation memory (Labs 31-33): where thread checkpoints are kept
+    checkpoint_store: Literal["memory", "sqlite", "postgres"] = "memory"
     checkpoint_sqlite_path: str = "data/checkpoints.sqlite"
+    checkpoint_pool_size: int = 10  # PostgreSQL connections for checkpoints (Lab 33)
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

@@ -45,6 +45,13 @@ explain (general questions). Set SB_RESEARCH_ROUTER=rules to route by the word r
     POST /v1/research/trace      answer with its audit trail
     GET  /v1/graphs/research/state | /schema | /diagram
 
+## Backups (Lab 33)
+
+Back up the database (clients, users and conversation checkpoints) before changing data:
+
+    bash scripts/backup-db.sh                                        # macOS, Linux
+    powershell -ExecutionPolicy Bypass -File scripts/backup-db.ps1   # Windows
+
 ## Graph diagram (Lab 27)
 
 The research graph's diagram lives in docs/research_graph.md (GitHub draws it).

@@ -12,6 +12,7 @@ __pycache__/
 
 # Local data and reports
 data/*.sqlite
+backups/
 reports/
 
 # Editor and operating-system files
