@@ -20,7 +20,8 @@ graph TD;
 	remember(remember)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> intake;
-	analyse -. &nbsp;__end__&nbsp; .-> review;
+	analyse -. &nbsp;done&nbsp; .-> remember;
+	analyse -.-> review;
 	analyse -.-> tools;
 	classify -. &nbsp;portfolio&nbsp; .-> analyse;
 	classify -. &nbsp;general&nbsp; .-> explain;

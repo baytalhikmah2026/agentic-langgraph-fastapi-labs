@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     graph_recursion_limit: int = 25
     # Review loop (Lab 24): how often a draft may be sent back for correction
     max_revisions: int = 2
+    # Tool errors (Lab 43): how many failed tool calls one question may have before giving up
+    max_tool_retries: int = 2
     # Who chooses the research track (Lab 30): the model, or the word rules only
     research_router: Literal["rules", "model"] = "model"
 

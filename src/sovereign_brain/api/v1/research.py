@@ -26,6 +26,7 @@ from sovereign_brain.memory.retention import ThreadRegistry
 from sovereign_brain.memory.threads import thread_config, thread_key
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
 from sovereign_brain.services.portfolio import PortfolioService
+from sovereign_brain.tools.errors import error_reports
 
 router = APIRouter(
     prefix="/v1/research", tags=["research"], dependencies=[Depends(get_current_user)]
@@ -80,6 +81,7 @@ def research_context(
         router=settings.research_router,
         memory=memory,
         history_limit=settings.history_limit,
+        max_tool_retries=settings.max_tool_retries,
     )
 
 
@@ -247,6 +249,10 @@ async def stream_research(
             else:
                 for node, update in payload.items():
                     yield ServerSentEvent(event="node", data={"node": node})
+                    if node == "tools":
+                        # A failed tool is reported as it happens; the model then tries again
+                        for report in error_reports(update["messages"]):
+                            yield ServerSentEvent(event="tool_error", data=report)
                     if node == "review" and update["status"] == "revising":
                         # The draft streamed so far was sent back: a corrected one follows
                         yield ServerSentEvent(

@@ -14,6 +14,7 @@ Lab 38: remember stores every finished answer in semantic memory (Qdrant), if it
 Lab 39: recall finds related earlier answers; the model reads them next to the thread.
 Lab 40: the model reads only the newest part of a long thread (trim_messages).
 Lab 42: the model is offered the whole tool wall: portfolio tools plus the stress test.
+Lab 43: a failing tool becomes a message; the model may retry, up to max_tool_retries.
 """
 
 import logging
@@ -22,10 +23,12 @@ from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
+    AIMessage,
     AnyMessage,
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
     trim_messages,
 )
 from langchain_core.runnables import RunnableConfig
@@ -42,6 +45,7 @@ from sovereign_brain.graphs.review import unsupported_figures
 from sovereign_brain.graphs.routing import ROUTER_PROMPT, Route, RouteDecision, classify_question
 from sovereign_brain.graphs.trail import TrailEntry, mark
 from sovereign_brain.memory.semantic import MemoryRecord, Recollection
+from sovereign_brain.tools.errors import failed_tools, tool_error_message
 from sovereign_brain.tools.registry import RESEARCH_TOOLS
 
 logger = logging.getLogger("sovereign_brain.research")
@@ -58,6 +62,10 @@ RESEARCH_PROMPT = (
 MEMORY_NOTE = (
     "Notes from this analyst's earlier conversations about this client. They may be out "
     "of date: use them for context only, and take every figure from the tools.\n"
+)
+GAVE_UP = (
+    "The Research Desk could not get the data for this question: a tool kept failing. "
+    "Please try again later, or ask the desk team to check the tools."
 )
 
 
@@ -185,6 +193,13 @@ def is_source(message: BaseMessage) -> bool:
     return message.type == "tool" or (message.type == "human" and message.name != "reviewer")
 
 
+def after_analyse(state: ResearchState) -> Literal["tools", "review", "done"]:
+    """The switch after analyse: run the tools, review a draft, or stop after tool errors."""
+    if state["status"] == "answered":  # analyse gave up (Lab 43)
+        return "done"
+    return "tools" if tools_condition(state) == "tools" else "review"
+
+
 def after_review(state: ResearchState) -> Literal["revise", "done"]:
     """The switch after review: back to analyse, or on to the end."""
     return "revise" if state["status"] == "revising" else "done"
@@ -270,14 +285,34 @@ def build_research_graph(
         return {"route": decision.route, "trail": mark("classify", note)}
 
     async def analyse(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
-        """Reason: the model either asks for tools or writes a draft answer."""
+        """Reason: the model either asks for tools or writes a draft answer.
+
+        Failed tools come back as error messages (Lab 43). The model reads them and may try
+        again; after more than max_tool_retries errors in one question, the desk gives up.
+        """
+        failed = failed_tools(state["messages"])
+        limit = runtime.context.max_tool_retries
+        if len(failed) > limit:
+            names = ", ".join(sorted({m.name or "unknown" for m in failed}))
+            return {
+                "messages": [AIMessage(GAVE_UP)],
+                "trail": mark("analyse", f"Gave up after {len(failed)} tool errors: {names}"),
+                "status": "answered",
+                "checked": False,  # nothing was checked, so remember will not store it
+                "answer": GAVE_UP,
+            }
+        trail = []
+        last = state["messages"][-1]
+        if isinstance(last, ToolMessage) and last.status == "error":
+            trail += mark("analyse", f"Tool error {len(failed)} of {limit} allowed: {last.name}")
         reply = await model_with_tools.ainvoke(with_memory(state, runtime.context.history_limit))
         if reply.tool_calls:
             names = ", ".join(call["name"] for call in reply.tool_calls)
-            return {"messages": [reply], "trail": mark("analyse", f"Asked for tools: {names}")}
+            trail += mark("analyse", f"Asked for tools: {names}")
+            return {"messages": [reply], "trail": trail}
         return {
             "messages": [reply],
-            "trail": mark("analyse", "Draft answer written"),
+            "trail": trail + mark("analyse", "Draft answer written"),
             "status": "drafted",
             "answer": str(reply.content),
         }
@@ -302,7 +337,8 @@ def build_research_graph(
     builder.add_node("recall", recall)
     builder.add_node("classify", choose_route)
     builder.add_node("analyse", analyse)
-    builder.add_node("tools", ToolNode(RESEARCH_TOOLS))  # act: run the requested tools
+    # act: run the requested tools; a failing tool answers with an error message (Lab 43)
+    builder.add_node("tools", ToolNode(RESEARCH_TOOLS, handle_tool_errors=tool_error_message))
     builder.add_node("explain", explain)
     builder.add_node("review", review)
     builder.add_node("remember", remember)
@@ -312,8 +348,10 @@ def build_research_graph(
     builder.add_conditional_edges(
         "classify", pick_track, {"portfolio": "analyse", "general": "explain"}
     )
-    # tools_condition answers "tools" or END; a finished draft now goes to review instead
-    builder.add_conditional_edges("analyse", tools_condition, {"tools": "tools", END: "review"})
+    # tools, a draft for review, or (after too many tool errors) straight to remember
+    builder.add_conditional_edges(
+        "analyse", after_analyse, {"tools": "tools", "review": "review", "done": "remember"}
+    )
     builder.add_edge("tools", "analyse")  # observe: the results go back to the model
     builder.add_conditional_edges(
         "review", after_review, {"revise": "analyse", "done": "remember"}
