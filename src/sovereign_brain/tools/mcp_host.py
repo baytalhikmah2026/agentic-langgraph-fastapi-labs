@@ -3,6 +3,7 @@
 Each server is a separate process that speaks the Model Context Protocol over stdio. The
 adapter library (langchain-mcp-adapters) discovers their tools at start-up, so the agent's tool
 wall grows without changing the graph. Every MCP call is written to the audit log.
+Lab 46: a server can get its own environment variables; only "market" gets the API token.
 """
 
 import logging
@@ -24,18 +25,39 @@ audit = logging.getLogger("sovereign_brain.audit.mcp")
 MCP_SERVERS = {
     "desk": "sovereign_brain.mcp_servers.desk",
     "notes": "sovereign_brain.mcp_servers.notes",  # Lab 45
+    "market": "sovereign_brain.mcp_servers.market",  # Lab 46
 }
 
 
-def server_connections(names: list[str]) -> dict[str, Connection]:
+def server_environment(name: str, settings: Settings) -> dict[str, str] | None:
+    """Extra environment variables for one server (Lab 46): each gets only what it needs."""
+    if name == "market":
+        return {
+            "SB_MARKET_API_URL": settings.market_api_url,
+            "SB_MARKET_API_TOKEN": settings.market_api_token.get_secret_value(),
+        }
+    return None
+
+
+def server_connections(
+    names: list[str], settings: Settings | None = None
+) -> dict[str, Connection]:
     """How to start each enabled server: this same Python, running the server's module."""
     unknown = set(names) - set(MCP_SERVERS)
     if unknown:
         raise ValueError(f"Unknown MCP servers: {', '.join(sorted(unknown))}")
-    return {
-        name: {"transport": "stdio", "command": sys.executable, "args": ["-m", MCP_SERVERS[name]]}
-        for name in names
-    }
+    connections: dict[str, Connection] = {}
+    for name in names:
+        connection: Connection = {
+            "transport": "stdio",
+            "command": sys.executable,
+            "args": ["-m", MCP_SERVERS[name]],
+        }
+        env = server_environment(name, settings) if settings else None
+        if env:
+            connection["env"] = env
+        connections[name] = connection
+    return connections
 
 
 async def audit_tool_call(
@@ -66,7 +88,7 @@ async def load_mcp_tools(settings: Settings) -> list[BaseTool]:
     if not settings.mcp_servers:
         return []
     client = MultiServerMCPClient(
-        server_connections(settings.mcp_servers), tool_interceptors=[audit_tool_call]
+        server_connections(settings.mcp_servers, settings), tool_interceptors=[audit_tool_call]
     )
     try:
         tools = await client.get_tools()

@@ -48,7 +48,10 @@ class Settings(BaseSettings):
     # Context window (Lab 40): older messages of a thread the model reads, at most
     history_limit: int = 20
     # MCP servers the API starts at start-up (Lab 44); an empty list switches MCP off
-    mcp_servers: list[str] = ["desk", "notes"]
+    mcp_servers: list[str] = ["desk", "notes", "market"]
+    # Internal market-data API (Lab 46): only the market MCP server talks to it
+    market_api_url: str = "http://localhost:8100"
+    market_api_token: SecretStr = SecretStr("local-market-token-change-me")
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

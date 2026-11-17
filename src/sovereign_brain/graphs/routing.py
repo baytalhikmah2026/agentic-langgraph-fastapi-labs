@@ -4,6 +4,7 @@ Lab 23: word rules (instant, always available).
 Lab 30: the model decides with structured output; the rules remain the safety net.
 Lab 42: stress tests ("what if prices fall") are portfolio questions too.
 Lab 45: questions about the research notes need tools, so they take the portfolio track.
+Lab 46: so do questions about current prices (market-data MCP server).
 """
 
 import re
@@ -17,8 +18,8 @@ ROUTER_PROMPT = (
     "You route questions on the Research Desk of Crescent Ledger Bank. "
     "Choose 'portfolio' when the question is about the client's own holdings, positions, "
     "sectors, exposure, allocation or a stress test of them, or when it asks what the "
-    "desk's research notes say. Choose 'general' for everything else, such as "
-    "definitions, markets or rules. Give a short reason."
+    "desk's research notes say or what a holding's current price is. Choose 'general' for "
+    "everything else, such as definitions, markets or rules. Give a short reason."
 )
 
 
@@ -38,6 +39,8 @@ PORTFOLIO_WORDS = (
     "note",
     "portfolio",
     "position",
+    "price",
+    "quote",
     "sector",
     "shock",
     "stake",

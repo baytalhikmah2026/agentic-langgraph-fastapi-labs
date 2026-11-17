@@ -17,6 +17,7 @@ Lab 42: the model is offered the whole tool wall: portfolio tools plus the stres
 Lab 43: a failing tool becomes a message; the model may retry, up to max_tool_retries.
 Lab 44: tools discovered on MCP servers join the wall (extra_tools).
 Lab 45: the analyst may read the desk's research notes (notes MCP server).
+Lab 46: current prices come from the market-data MCP server, never from memory.
 """
 
 import logging
@@ -62,6 +63,7 @@ RESEARCH_PROMPT = (
     "with the figures it returned. "
     "When the question is about the desk's views or research notes, call list_notes and "
     "read_note if you have them, and say which note you used. "
+    "For a current price, call get_quote if you have it; never take prices from memory notes. "
     "Answer in at most three sentences. "
     "If the tools have no data, say which data you would check."
 )

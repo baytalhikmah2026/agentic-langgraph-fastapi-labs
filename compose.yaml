@@ -18,6 +18,7 @@ services:
       SB_RATE_LIMIT_STORAGE_URI: redis://redis:6379/1
       SB_CHECKPOINT_STORE: postgres
       SB_QDRANT_URL: http://qdrant:6333
+      SB_MARKET_API_URL: http://market:8100
     depends_on:
       ollama:
         condition: service_healthy
@@ -26,6 +27,8 @@ services:
       redis:
         condition: service_healthy
       qdrant:
+        condition: service_healthy
+      market:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
@@ -41,6 +44,23 @@ services:
           path: pyproject.toml
         - action: rebuild
           path: uv.lock
+
+  market:
+    # The internal market-data API (Lab 46): same image as the API, its own small app
+    build: .
+    image: sovereign-brain-api:dev
+    container_name: sb-market
+    command: ["fastapi", "run", "src/sovereign_brain/market/app.py", "--host", "0.0.0.0", "--port", "8100"]
+    ports:
+      - "8100:8100"
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   ollama:
     image: ollama/ollama:0.40.16
