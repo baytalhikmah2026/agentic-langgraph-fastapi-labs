@@ -9,6 +9,7 @@ Lab 26: an append-only audit trail: every station adds what it decided and when.
 Lab 28: services and limits arrive with each run (context_schema), not at build time.
 Lab 30: the model chooses the track (structured output); the word rules are the fallback.
 Lab 31: a checkpointer keeps each thread's state, so follow-ups continue a conversation.
+Lab 37: write_brief is shared with corrections, which rewrite a brief in an earlier checkpoint.
 """
 
 import logging
@@ -69,13 +70,18 @@ class ResearchState(ResearchInput):
     checked: bool | None  # overwritten: True when every figure was found; None until checked
 
 
+def write_brief(client_id: str, client_profile: str, question: str) -> str:
+    """The message the model reads for one question: who the client is, and what is asked."""
+    return f"Client {client_id} ({client_profile}): {question}"
+
+
 def intake(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
     """Turn the request into messages for the model (no AI in this step).
 
     A new thread starts with the system prompt; a follow-up only adds the new question.
     The per-question fields (status, revisions, checked) start again for every question.
     """
-    brief = f"Client {state['client_id']} ({state['client_profile']}): {state['question']}"
+    brief = write_brief(state["client_id"], state["client_profile"], state["question"])
     first_turn = not state.get("messages")
     opening = [SystemMessage(RESEARCH_PROMPT)] if first_turn else []
     note = f"Request received for {state['client_id']} from {runtime.context.analyst}"

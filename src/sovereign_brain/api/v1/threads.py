@@ -1,4 +1,4 @@
-"""Conversation threads: look at what the Research Desk remembers (Labs 31-36)."""
+"""Conversation threads: look at what the Research Desk remembers (Labs 31-37)."""
 
 import logging
 from datetime import UTC, datetime
@@ -10,10 +10,12 @@ from sovereign_brain.api.v1.research import Registry, ResearchGraph, RunContext,
 from sovereign_brain.core.rate_limit import model_call_gate
 from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.security import CurrentUser, get_current_user
+from sovereign_brain.memory.corrections import CORRECTABLE_NEXT, correct_question
 from sovereign_brain.memory.threads import THREAD_ID_PATTERN, thread_config, thread_key
 from sovereign_brain.schemas.research import ResearchResponse
 from sovereign_brain.schemas.thread import (
     CheckpointSummary,
+    CorrectionRequest,
     RewindRequest,
     ThreadMessage,
     ThreadSnapshot,
@@ -163,6 +165,54 @@ async def rewind_thread(
     logger.info("Rewinding thread %s to step %s", thread_id, snapshot.metadata["step"])
     await registry.touch(key, user.username, thread_id, client_id)
     # No input + a checkpoint_id: LangGraph starts a new branch from that checkpoint
+    result = await graph.ainvoke(None, config=config, context=context)
+    return ResearchResponse(
+        request_id=get_request_id(),
+        client_id=client_id,
+        status="completed",
+        summary=result["answer"],
+        route=result["route"],
+        checked=result.get("checked"),
+        thread_id=thread_id,
+        created_at=datetime.now(UTC),
+    )
+
+
+@router.post("/{thread_id}/correct", dependencies=[Depends(model_call_gate)])
+async def correct_thread(
+    thread_id: ThreadId,
+    body: CorrectionRequest,
+    graph: ResearchGraph,
+    user: CurrentUser,
+    context: RunContext,
+    registry: Registry,
+) -> ResearchResponse:
+    """Correct the question at an earlier checkpoint and run a new branch from there (Lab 37).
+
+    Only the checkpoint right after intake can be corrected: there the question has been
+    read and nothing has been decided yet.
+    """
+    key = thread_key(user.username, thread_id)
+    config = run_config(key)
+    config["configurable"]["checkpoint_id"] = body.checkpoint_id
+    snapshot = await graph.aget_state(config)
+    if not snapshot.values:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Checkpoint {body.checkpoint_id} not found in thread {thread_id}",
+        )
+    if snapshot.next != CORRECTABLE_NEXT:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Checkpoint {body.checkpoint_id} is not right after intake; "
+            "choose the checkpoint whose next station is classify",
+        )
+    client_id = snapshot.values["client_id"]
+    logger.info("Correcting thread %s at step %s", thread_id, snapshot.metadata["step"])
+    await registry.touch(key, user.username, thread_id, client_id)
+    corrected = await correct_question(graph, snapshot, body.question, user.username)
+    # Run from the corrected checkpoint: classify and everything after it run again
+    config["configurable"]["checkpoint_id"] = corrected["configurable"]["checkpoint_id"]
     result = await graph.ainvoke(None, config=config, context=context)
     return ResearchResponse(
         request_id=get_request_id(),

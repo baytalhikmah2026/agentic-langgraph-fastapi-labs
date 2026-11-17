@@ -1,7 +1,9 @@
-"""Lab 36: show a thread's checkpoint history, and rewind it to one of its checkpoints.
+"""Labs 36-37: show a thread's checkpoint history, rewind it, or correct its question.
 
     uv run python scripts/time_travel.py amina energy-review
     uv run python scripts/time_travel.py amina energy-review --rewind <checkpoint_id>
+    uv run python scripts/time_travel.py amina energy-review --correct <checkpoint_id>
+        --question "Summarise this client's exposure to financial stocks."
 """
 
 import argparse
@@ -24,10 +26,9 @@ def show_history(client: httpx.Client, thread_id: str) -> None:
         )
 
 
-def rewind(client: httpx.Client, thread_id: str, checkpoint_id: str) -> None:
-    response = client.post(
-        f"/v1/threads/{thread_id}/rewind", json={"checkpoint_id": checkpoint_id}
-    )
+def run_again(client: httpx.Client, path: str, body: dict) -> None:
+    """Send a rewind or a correction, and print the new answer (or why it was refused)."""
+    response = client.post(path, json=body)
     if response.is_error:
         print(f"{response.status_code}: {response.json()['message']}")
         return
@@ -35,15 +36,24 @@ def rewind(client: httpx.Client, thread_id: str, checkpoint_id: str) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Thread history and time travel")
+    parser = argparse.ArgumentParser(description="Thread history, time travel and corrections")
     parser.add_argument("username")
     parser.add_argument("thread_id")
-    parser.add_argument("--rewind", metavar="CHECKPOINT_ID")
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--rewind", metavar="CHECKPOINT_ID")
+    action.add_argument("--correct", metavar="CHECKPOINT_ID")
+    parser.add_argument("--question", help="the corrected question (with --correct)")
     args = parser.parse_args()
+    if args.correct and not args.question:
+        parser.error("--correct needs --question")
     token = login(API, args.username)
     headers = {"Authorization": f"Bearer {token}"}
-    # A rewind runs the model again, which can take a while on a laptop
+    # A rewind or a correction runs the model again, which can take a while on a laptop
     with httpx.Client(base_url=API, headers=headers, timeout=180) as client:
+        threads = f"/v1/threads/{args.thread_id}"
         if args.rewind:
-            rewind(client, args.thread_id, args.rewind)
+            run_again(client, f"{threads}/rewind", {"checkpoint_id": args.rewind})
+        elif args.correct:
+            body = {"checkpoint_id": args.correct, "question": args.question}
+            run_again(client, f"{threads}/correct", body)
         show_history(client, args.thread_id)

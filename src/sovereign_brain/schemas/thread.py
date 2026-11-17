@@ -1,4 +1,4 @@
-"""What the API shows about a conversation thread (Labs 31-36)."""
+"""What the API shows about a conversation thread (Labs 31-37)."""
 
 from pydantic import BaseModel, Field
 
@@ -43,3 +43,10 @@ class RewindRequest(BaseModel):
     """Which checkpoint to go back to: one of the IDs from the history."""
 
     checkpoint_id: str = Field(min_length=1, max_length=64)
+
+
+class CorrectionRequest(BaseModel):
+    """A corrected question for the checkpoint right after intake (Lab 37)."""
+
+    checkpoint_id: str = Field(min_length=1, max_length=64)
+    question: str = Field(min_length=10, max_length=2000)
