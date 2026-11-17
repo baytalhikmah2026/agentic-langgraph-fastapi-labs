@@ -39,6 +39,7 @@ async def http_error(request: Request, exc: StarletteHTTPException) -> JSONRespo
         404: "not_found",
         405: "method_not_allowed",
         409: "conflict",
+        503: "service_unavailable",
     }
     error = names.get(exc.status_code, "http_error")
     return error_response(exc.status_code, error, str(exc.detail), headers=exc.headers)

@@ -1,14 +1,15 @@
-"""Memory housekeeping: retention report and clean-up on request (Lab 34)."""
+"""Memory housekeeping (Lab 34) and semantic recall (Lab 38)."""
 
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from sovereign_brain.api.v1.research import Registry, ResearchGraph
-from sovereign_brain.core.security import get_current_user
+from sovereign_brain.api.v1.research import Memory, Registry, ResearchGraph
+from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.memory.retention import collect_garbage
+from sovereign_brain.memory.semantic import Recollection
 from sovereign_brain.schemas.memory import CleanupResult, RetentionReport
 
 router = APIRouter(prefix="/v1/memory", tags=["memory"], dependencies=[Depends(get_current_user)])
@@ -36,3 +37,17 @@ async def cleanup_now(
         registry, graph.checkpointer, timedelta(minutes=minutes), "manual"
     )
     return CleanupResult(removed=removed)
+
+
+@router.get("/recall")
+async def recall(
+    user: CurrentUser,
+    memory: Memory,
+    client_id: Annotated[str, Query(pattern=r"^C-\d{4}$")],
+    question: Annotated[str, Query(min_length=3, max_length=500)],
+    limit: Annotated[int, Query(ge=1, le=10)] = 3,
+) -> list[Recollection]:
+    """Your remembered answers for one client, closest in meaning to `question` (Lab 38)."""
+    if memory is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Semantic memory is switched off")
+    return await memory.recall(user.username, client_id, question, limit)

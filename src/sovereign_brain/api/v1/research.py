@@ -20,6 +20,7 @@ from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
 from sovereign_brain.graphs.context import ResearchContext
+from sovereign_brain.memory.semantic import SemanticMemory
 from sovereign_brain.memory.retention import ThreadRegistry
 from sovereign_brain.memory.threads import thread_config, thread_key
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
@@ -48,8 +49,18 @@ def get_portfolio(request: Request) -> PortfolioService:
     return request.app.state.portfolio
 
 
+def get_memory(request: Request) -> SemanticMemory | None:
+    """Semantic memory created at start-up, or None when it is switched off (Lab 38)."""
+    return request.app.state.memory
+
+
+Memory = Annotated[SemanticMemory | None, Depends(get_memory)]
+
+
 def research_context(
-    user: CurrentUser, portfolio: Annotated[PortfolioService, Depends(get_portfolio)]
+    user: CurrentUser,
+    portfolio: Annotated[PortfolioService, Depends(get_portfolio)],
+    memory: Memory,
 ) -> ResearchContext:
     """What this run brings along: the services, the signed-in analyst, today's limits."""
     settings = get_settings()
@@ -58,6 +69,7 @@ def research_context(
         analyst=user.username,
         max_revisions=settings.max_revisions,
         router=settings.research_router,
+        memory=memory,
     )
 
 

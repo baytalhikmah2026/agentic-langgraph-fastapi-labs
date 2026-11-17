@@ -9,7 +9,15 @@ def test_the_research_state_is_described(
     assert response.status_code == 200
     body = response.json()
     assert body["graph"] == "research"
-    assert body["nodes"] == ["intake", "classify", "analyse", "tools", "explain", "review"]
+    assert body["nodes"] == [
+        "intake",
+        "classify",
+        "analyse",
+        "tools",
+        "explain",
+        "review",
+        "remember",
+    ]
     assert body["fields"]["messages"] == "append (add_messages)"
     assert body["fields"]["trail"] == "append (add)"
     assert body["fields"]["status"] == "overwrite"

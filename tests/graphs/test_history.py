@@ -29,9 +29,10 @@ async def test_the_history_has_one_checkpoint_per_step(make_model: Callable) -> 
 
     history = [snapshot async for snapshot in graph.aget_state_history(config)]
 
-    assert [s.metadata["step"] for s in history] == [3, 2, 1, 0, -1]
+    assert [s.metadata["step"] for s in history] == [4, 3, 2, 1, 0, -1]
     assert [s.next for s in history] == [
         (),
+        ("remember",),
         ("explain",),
         ("classify",),
         ("intake",),

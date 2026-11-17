@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -20,9 +21,10 @@ from sovereign_brain.core.request_id import RequestIdMiddleware
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
 from sovereign_brain.graphs.research import build_research_graph
-from sovereign_brain.llm.factory import get_chat_model
+from sovereign_brain.llm.factory import get_chat_model, get_embeddings
 from sovereign_brain.memory.checkpoints import open_checkpointer
 from sovereign_brain.memory.retention import ThreadRegistry, cleanup_worker
+from sovereign_brain.memory.semantic import SemanticMemory
 from sovereign_brain.services.portfolio import PortfolioService
 
 logger = logging.getLogger("sovereign_brain")
@@ -39,6 +41,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Services live on app.state and reach each run through its context (Lab 28)
     app.state.portfolio = PortfolioService(app.state.session_factory)
     app.state.thread_registry = ThreadRegistry(app.state.session_factory)
+    # Semantic memory (Lab 38): the Qdrant client connects on first use
+    qdrant = AsyncQdrantClient(url=settings.qdrant_url)
+    app.state.memory = None
+    if settings.semantic_memory:
+        app.state.memory = SemanticMemory(
+            qdrant,
+            get_embeddings(settings),
+            settings.memory_collection,
+            settings.embedding_dimensions,
+            settings.memory_min_score,
+        )
+        logger.info("Semantic memory: Qdrant at %s", settings.qdrant_url)
     # Thread memory (Lab 32): the checkpointer stays open while the API runs
     async with open_checkpointer(settings) as checkpointer:
         app.state.research_graph = build_research_graph(
@@ -53,6 +67,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         worker.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await worker
+    await qdrant.close()
     await redis_client.aclose()
     await engine.dispose()
     logger.info("Shutting down %s", settings.app_name)

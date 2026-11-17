@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     # Thread expiry (Lab 34): unused threads are removed after this time (default 7 days)
     thread_ttl_minutes: int = 10080
     cleanup_interval_minutes: int = 60
+    # Semantic memory (Lab 38): answers stored by meaning in Qdrant, across all threads
+    semantic_memory: bool = True
+    qdrant_url: str = "http://localhost:6333"
+    memory_collection: str = "research_memory"
+    embedding_model: str = "nomic-embed-text:v1.5"
+    embedding_dimensions: int = 768  # nomic-embed-text returns 768 numbers per text
+    memory_min_score: float = 0.6
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

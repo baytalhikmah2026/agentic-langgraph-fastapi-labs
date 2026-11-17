@@ -16,17 +16,19 @@ graph TD;
 	tools(tools<hr/><small><em>__tools = get_positions, sector_exposure</em></small>)
 	explain(explain)
 	review(review)
+	remember(remember)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> intake;
 	analyse -. &nbsp;__end__&nbsp; .-> review;
 	analyse -.-> tools;
 	classify -. &nbsp;portfolio&nbsp; .-> analyse;
 	classify -. &nbsp;general&nbsp; .-> explain;
+	explain --> remember;
 	intake --> classify;
-	review -. &nbsp;done&nbsp; .-> __end__;
 	review -. &nbsp;revise&nbsp; .-> analyse;
+	review -. &nbsp;done&nbsp; .-> remember;
 	tools --> analyse;
-	explain --> __end__;
+	remember --> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0
 	classDef last fill:#bfb6fc

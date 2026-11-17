@@ -1,4 +1,4 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-35)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-38)."""
 
 import asyncio
 import itertools
@@ -9,13 +9,20 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from sovereign_brain.api.v1.research import get_portfolio, get_research_graph, get_thread_registry
+from sovereign_brain.api.v1.research import (
+    get_memory,
+    get_portfolio,
+    get_research_graph,
+    get_thread_registry,
+)
 from sovereign_brain.core.cache import ResearchCache
 from sovereign_brain.core.rate_limit import limiter
 from sovereign_brain.core.security import hash_password
@@ -25,6 +32,7 @@ from sovereign_brain.db.session import get_session
 from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.main import create_app
 from sovereign_brain.memory.retention import ThreadRegistry
+from sovereign_brain.memory.semantic import SemanticMemory
 from sovereign_brain.services.portfolio import PortfolioService
 
 FAKE_ANSWER = "Energy stocks are a modest part of this client's portfolio."
@@ -55,6 +63,26 @@ class FailsOnce:
         if self.calls == self.fail_on_call:
             raise ConnectionError("The AI model is not reachable")
         return next(self.replies)
+
+
+class WordEmbeddings(Embeddings):
+    """A tiny stand-in for the embedding model (Lab 38): one number per finance word.
+
+    Texts that share words point in similar directions, which is enough to test recall.
+    The last number is always 1, so no text is ever an all-zero vector.
+    """
+
+    WORDS = ("bond", "energy", "financial", "share", "exposure", "risk")
+
+    def vector(self, text: str) -> list[float]:
+        words = text.lower().replace("?", " ").replace(".", " ").split()
+        return [float(sum(w.startswith(word) for w in words)) for word in self.WORDS] + [1.0]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self.vector(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.vector(text)
 
 
 def seed_rows() -> list:
@@ -92,6 +120,18 @@ def make_flaky_model() -> Callable[[Iterable[BaseMessage], int], FakeToolModel]:
 
     def make(replies: Iterable[BaseMessage], fail_on_call: int = 1) -> FakeToolModel:
         return FakeToolModel(messages=FailsOnce(replies, fail_on_call))
+
+    return make
+
+
+@pytest.fixture
+def make_memory() -> Callable[[], SemanticMemory]:
+    """Builds a semantic memory in an in-process Qdrant (no server) with word embeddings."""
+
+    def make() -> SemanticMemory:
+        dimensions = len(WordEmbeddings.WORDS) + 1
+        client = AsyncQdrantClient(location=":memory:")
+        return SemanticMemory(client, WordEmbeddings(), "test_memory", dimensions, min_score=0.5)
 
     return make
 
@@ -167,6 +207,7 @@ def app(database_url: str) -> FastAPI:
     application.dependency_overrides[get_portfolio] = lambda: portfolio
     registry = ThreadRegistry(sessions)
     application.dependency_overrides[get_thread_registry] = lambda: registry
+    application.dependency_overrides[get_memory] = lambda: None  # memory off unless a test says so
     return application
 
 

@@ -52,6 +52,13 @@ Back up the database (clients, users and conversation checkpoints) before changi
     bash scripts/backup-db.sh                                        # macOS, Linux
     powershell -ExecutionPolicy Bypass -File scripts/backup-db.ps1   # Windows
 
+## Semantic memory (Lab 38)
+
+Finished answers are stored by meaning in Qdrant (service `qdrant`, dashboard at
+http://localhost:6333/dashboard) using the `nomic-embed-text:v1.5` model in Ollama.
+Find them again with `GET /v1/memory/recall?client_id=C-1042&question=...`.
+Set `SB_SEMANTIC_MEMORY=false` in `.env` to switch it off.
+
 ## Graph diagram (Lab 27)
 
 The research graph's diagram lives in docs/research_graph.md (GitHub draws it).

@@ -10,6 +10,7 @@ Lab 28: services and limits arrive with each run (context_schema), not at build 
 Lab 30: the model chooses the track (structured output); the word rules are the fallback.
 Lab 31: a checkpointer keeps each thread's state, so follow-ups continue a conversation.
 Lab 37: write_brief is shared with corrections, which rewrite a brief in an earlier checkpoint.
+Lab 38: remember stores every finished answer in semantic memory (Qdrant), if it is on.
 """
 
 import logging
@@ -18,6 +19,7 @@ from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AnyMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
@@ -29,6 +31,7 @@ from sovereign_brain.graphs.context import ResearchContext
 from sovereign_brain.graphs.review import unsupported_figures
 from sovereign_brain.graphs.routing import ROUTER_PROMPT, Route, RouteDecision, classify_question
 from sovereign_brain.graphs.trail import TrailEntry, mark
+from sovereign_brain.memory.semantic import MemoryRecord
 from sovereign_brain.tools.portfolio import PORTFOLIO_TOOLS
 
 logger = logging.getLogger("sovereign_brain.research")
@@ -140,6 +143,32 @@ def review(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
     }
 
 
+async def remember(
+    state: ResearchState, config: RunnableConfig, runtime: Runtime[ResearchContext]
+) -> dict:
+    """Store the finished answer in semantic memory (Lab 38). Memory off: nothing to do."""
+    memory = runtime.context.memory
+    if memory is None:
+        return {}
+    if state.get("checked") is False:
+        return {"trail": mark("remember", "Not stored: some figures could not be checked")}
+    key = config["configurable"].get("thread_id", "")  # "<username>:<thread_id>" (Lab 31)
+    try:
+        record = MemoryRecord(
+            owner=runtime.context.analyst,
+            client_id=state["client_id"],
+            thread_id=key.partition(":")[2] or "-",
+            question=state["question"],
+            answer=state["answer"],
+            route=state["route"],
+        )
+        await memory.remember(record)
+    except Exception as error:  # memory is a bonus: an answer is never lost because of it
+        logger.warning("Answer not stored in semantic memory: %r", error)
+        return {"trail": mark("remember", f"Not stored: {type(error).__name__}")}
+    return {"trail": mark("remember", "Answer stored in semantic memory")}
+
+
 def build_research_graph(
     model: BaseChatModel, checkpointer: BaseCheckpointSaver | None = None
 ) -> CompiledStateGraph:
@@ -203,6 +232,7 @@ def build_research_graph(
     builder.add_node("tools", ToolNode(PORTFOLIO_TOOLS))  # act: run the requested tools
     builder.add_node("explain", explain)
     builder.add_node("review", review)
+    builder.add_node("remember", remember)
     builder.add_edge(START, "intake")
     builder.add_edge("intake", "classify")
     builder.add_conditional_edges(
@@ -211,6 +241,9 @@ def build_research_graph(
     # tools_condition answers "tools" or END; a finished draft now goes to review instead
     builder.add_conditional_edges("analyse", tools_condition, {"tools": "tools", END: "review"})
     builder.add_edge("tools", "analyse")  # observe: the results go back to the model
-    builder.add_conditional_edges("review", after_review, {"revise": "analyse", "done": END})
-    builder.add_edge("explain", END)
+    builder.add_conditional_edges(
+        "review", after_review, {"revise": "analyse", "done": "remember"}
+    )
+    builder.add_edge("explain", "remember")
+    builder.add_edge("remember", END)
     return builder.compile(name="research", checkpointer=checkpointer)
