@@ -1,4 +1,4 @@
-"""What the API reports about memory retention (Lab 34)."""
+"""What the API reports about memory retention (Lab 34) and archiving (Lab 40)."""
 
 from datetime import datetime
 
@@ -18,3 +18,11 @@ class RetentionReport(BaseModel):
 
 class CleanupResult(BaseModel):
     removed: int
+    summarised: int = 0  # threads kept as knowledge nuggets in semantic memory (Lab 40)
+
+
+class ArchiveResult(BaseModel):
+    """A thread summarised into semantic memory and then erased (Lab 40)."""
+
+    thread_id: str
+    summary: str

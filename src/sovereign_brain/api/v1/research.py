@@ -21,6 +21,7 @@ from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
 from sovereign_brain.graphs.context import ResearchContext
 from sovereign_brain.memory.semantic import SemanticMemory
+from sovereign_brain.memory.summaries import ThreadArchivist
 from sovereign_brain.memory.retention import ThreadRegistry
 from sovereign_brain.memory.threads import thread_config, thread_key
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
@@ -57,6 +58,14 @@ def get_memory(request: Request) -> SemanticMemory | None:
 Memory = Annotated[SemanticMemory | None, Depends(get_memory)]
 
 
+def get_archivist(request: Request) -> ThreadArchivist | None:
+    """Summarises threads into semantic memory; None when memory is switched off (Lab 40)."""
+    return request.app.state.archivist
+
+
+Archivist = Annotated[ThreadArchivist | None, Depends(get_archivist)]
+
+
 def research_context(
     user: CurrentUser,
     portfolio: Annotated[PortfolioService, Depends(get_portfolio)],
@@ -70,6 +79,7 @@ def research_context(
         max_revisions=settings.max_revisions,
         router=settings.research_router,
         memory=memory,
+        history_limit=settings.history_limit,
     )
 
 

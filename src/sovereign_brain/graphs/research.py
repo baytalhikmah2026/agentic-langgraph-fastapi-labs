@@ -12,6 +12,7 @@ Lab 31: a checkpointer keeps each thread's state, so follow-ups continue a conve
 Lab 37: write_brief is shared with corrections, which rewrite a brief in an earlier checkpoint.
 Lab 38: remember stores every finished answer in semantic memory (Qdrant), if it is on.
 Lab 39: recall finds related earlier answers; the model reads them next to the thread.
+Lab 40: the model reads only the newest part of a long thread (trim_messages).
 """
 
 import logging
@@ -19,7 +20,13 @@ import operator
 from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AnyMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    trim_messages,
+)
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
@@ -129,13 +136,24 @@ async def recall(
     }
 
 
-def with_memory(state: ResearchState) -> list[AnyMessage]:
+def with_memory(state: ResearchState, history_limit: int = 20) -> list[AnyMessage]:
     """What the model reads: the thread's messages, plus a note of related earlier answers.
 
     The note sits just before the newest question. It is built for each model call and never
     saved in the thread, so the conversation does not grow with old notes (Lab 39).
+    Older turns are trimmed to `history_limit` messages; the current turn is never cut (Lab 40).
     """
     messages = list(state["messages"])
+    newest = max(i for i, m in enumerate(messages) if m.type == "human" and m.name != "reviewer")
+    older = trim_messages(
+        messages[:newest],
+        max_tokens=history_limit,  # with token_counter=len, "tokens" means messages
+        token_counter=len,
+        strategy="last",  # keep the most recent turns
+        start_on="human",  # never start in the middle of a turn
+        include_system=True,  # always keep the system prompt
+    )
+    current = messages[newest:]
     notes = []
     for item in state.get("recollections") or []:
         try:
@@ -143,10 +161,9 @@ def with_memory(state: ResearchState) -> list[AnyMessage]:
         except ValidationError:  # only well-formed memories may reach the model
             logger.warning("A recollection was left out: it does not match MemoryRecord")
     if not notes:
-        return messages
+        return [*older, *current]
     lines = "\n".join(f"- {n.saved_at:%Y-%m-%d} Q: {n.question} A: {n.answer}" for n in notes)
-    newest = max(i for i, m in enumerate(messages) if m.type == "human" and m.name != "reviewer")
-    return [*messages[:newest], SystemMessage(MEMORY_NOTE + lines), *messages[newest:]]
+    return [*older, SystemMessage(MEMORY_NOTE + lines), *current]
 
 
 def classify(state: ResearchState) -> dict:
@@ -249,9 +266,9 @@ def build_research_graph(
         note = f"Route: {decision.route} (model: {decision.reason})"
         return {"route": decision.route, "trail": mark("classify", note)}
 
-    async def analyse(state: ResearchState) -> dict:
+    async def analyse(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
         """Reason: the model either asks for tools or writes a draft answer."""
-        reply = await model_with_tools.ainvoke(with_memory(state))
+        reply = await model_with_tools.ainvoke(with_memory(state, runtime.context.history_limit))
         if reply.tool_calls:
             names = ", ".join(call["name"] for call in reply.tool_calls)
             return {"messages": [reply], "trail": mark("analyse", f"Asked for tools: {names}")}
@@ -262,9 +279,9 @@ def build_research_graph(
             "answer": str(reply.content),
         }
 
-    async def explain(state: ResearchState) -> dict:
+    async def explain(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
         """Answer a general question directly: no tools, one model call."""
-        reply = await model.ainvoke(with_memory(state))
+        reply = await model.ainvoke(with_memory(state, runtime.context.history_limit))
         return {
             "messages": [reply],
             "trail": mark("explain", "General answer written"),

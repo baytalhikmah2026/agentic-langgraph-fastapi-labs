@@ -1,11 +1,11 @@
-"""Memory housekeeping (Lab 34) and semantic recall (Lab 38)."""
+"""Memory housekeeping (Labs 34, 40) and semantic recall (Lab 38)."""
 
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from sovereign_brain.api.v1.research import Memory, Registry, ResearchGraph
+from sovereign_brain.api.v1.research import Archivist, Memory, Registry, ResearchGraph
 from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.memory.retention import collect_garbage
@@ -27,16 +27,17 @@ async def retention_report(registry: Registry) -> RetentionReport:
 async def cleanup_now(
     registry: Registry,
     graph: ResearchGraph,
+    archivist: Archivist,
     older_than_minutes: Annotated[int | None, Query(ge=0)] = None,
 ) -> CleanupResult:
     """Run the clean-up now; `older_than_minutes` overrides the TTL for this run only."""
     minutes = older_than_minutes
     if minutes is None:
         minutes = get_settings().thread_ttl_minutes
-    removed = await collect_garbage(
-        registry, graph.checkpointer, timedelta(minutes=minutes), "manual"
+    removed, summarised = await collect_garbage(
+        registry, graph, timedelta(minutes=minutes), "manual", archivist
     )
-    return CleanupResult(removed=removed)
+    return CleanupResult(removed=removed, summarised=summarised)
 
 
 @router.get("/recall")

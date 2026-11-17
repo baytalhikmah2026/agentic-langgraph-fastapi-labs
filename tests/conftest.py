@@ -1,4 +1,4 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-38)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-40)."""
 
 import asyncio
 import itertools
@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from sovereign_brain.api.v1.research import (
+    get_archivist,
     get_memory,
     get_portfolio,
     get_research_graph,
@@ -95,6 +96,8 @@ def seed_rows() -> list:
              role="analyst", disabled=False),
         User(username="former.analyst", full_name="Former Analyst",
              hashed_password=PASSWORD_HASH, role="analyst", disabled=True),
+        User(username="omar", full_name="Omar Siddiqui", hashed_password=PASSWORD_HASH,
+             role="analyst", disabled=False),
         Position(id=1, client_id="C-1042", ticker="GLFP", name="Gulf Petroleum Co",
                  sector="Energy", market_value_usd=120000),
         Position(id=2, client_id="C-1042", ticker="SNRS", name="Sunrise Solar",
@@ -208,6 +211,7 @@ def app(database_url: str) -> FastAPI:
     registry = ThreadRegistry(sessions)
     application.dependency_overrides[get_thread_registry] = lambda: registry
     application.dependency_overrides[get_memory] = lambda: None  # memory off unless a test says so
+    application.dependency_overrides[get_archivist] = lambda: None
     return application
 
 
@@ -217,8 +221,19 @@ def client(app: FastAPI) -> Iterator[TestClient]:
         yield test_client
 
 
+def sign_in(client: TestClient, username: str) -> dict[str, str]:
+    """Signs in through the real token endpoint and returns the Authorization header."""
+    response = client.post("/v1/auth/token", data={"username": username, "password": PASSWORD})
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
 @pytest.fixture
 def auth_headers(client: TestClient) -> dict[str, str]:
-    """Signs in as amina through the real token endpoint."""
-    response = client.post("/v1/auth/token", data={"username": "amina", "password": PASSWORD})
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    """Signs in as amina."""
+    return sign_in(client, "amina")
+
+
+@pytest.fixture
+def omar_headers(client: TestClient) -> dict[str, str]:
+    """Signs in as omar, a second analyst (Lab 40)."""
+    return sign_in(client, "omar")

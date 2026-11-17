@@ -25,6 +25,7 @@ from sovereign_brain.llm.factory import get_chat_model, get_embeddings
 from sovereign_brain.memory.checkpoints import open_checkpointer
 from sovereign_brain.memory.retention import ThreadRegistry, cleanup_worker
 from sovereign_brain.memory.semantic import SemanticMemory
+from sovereign_brain.memory.summaries import ThreadArchivist
 from sovereign_brain.services.portfolio import PortfolioService
 
 logger = logging.getLogger("sovereign_brain")
@@ -41,9 +42,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Services live on app.state and reach each run through its context (Lab 28)
     app.state.portfolio = PortfolioService(app.state.session_factory)
     app.state.thread_registry = ThreadRegistry(app.state.session_factory)
+    model = get_chat_model(settings)
     # Semantic memory (Lab 38): the Qdrant client connects on first use
     qdrant = AsyncQdrantClient(url=settings.qdrant_url)
     app.state.memory = None
+    app.state.archivist = None
     if settings.semantic_memory:
         app.state.memory = SemanticMemory(
             qdrant,
@@ -53,15 +56,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.memory_min_score,
         )
         logger.info("Semantic memory: Qdrant at %s", settings.qdrant_url)
+        # Knowledge nuggets (Lab 40): threads are summarised into memory before they expire
+        app.state.archivist = ThreadArchivist(model, app.state.memory)
     # Thread memory (Lab 32): the checkpointer stays open while the API runs
     async with open_checkpointer(settings) as checkpointer:
-        app.state.research_graph = build_research_graph(
-            get_chat_model(settings), checkpointer=checkpointer
-        )
+        app.state.research_graph = build_research_graph(model, checkpointer=checkpointer)
         logger.info("Research graph ready (model %s)", settings.llm_model)
         # Thread expiry (Lab 34): a background task that runs as long as the API runs
         worker = asyncio.create_task(
-            cleanup_worker(app.state.thread_registry, checkpointer, settings)
+            cleanup_worker(
+                app.state.thread_registry,
+                app.state.research_graph,
+                settings,
+                app.state.archivist,
+            )
         )
         yield
         worker.cancel()

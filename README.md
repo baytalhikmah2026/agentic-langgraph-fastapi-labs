@@ -58,6 +58,8 @@ Finished answers are stored by meaning in Qdrant (service `qdrant`, dashboard at
 http://localhost:6333/dashboard) using the `nomic-embed-text:v1.5` model in Ollama.
 Find them again with `GET /v1/memory/recall?client_id=C-1042&question=...`.
 Set `SB_SEMANTIC_MEMORY=false` in `.env` to switch it off.
+Before a thread expires, it is summarised into Qdrant as a knowledge nugget (Lab 40);
+`POST /v1/threads/{thread_id}/archive` does it right away.
 
 ## Graph diagram (Lab 27)
 

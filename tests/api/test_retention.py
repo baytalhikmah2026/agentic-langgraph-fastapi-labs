@@ -26,7 +26,7 @@ def test_the_cleanup_removes_unused_threads(
     # older_than_minutes=0: every thread not used since this very moment counts as expired
     cleanup = client.post("/v1/memory/cleanup?older_than_minutes=0", headers=auth_headers)
 
-    assert cleanup.json() == {"removed": 1}
+    assert cleanup.json() == {"removed": 1, "summarised": 0}
     assert client.get("/v1/threads/energy-review", headers=auth_headers).status_code == 404
     report = client.get("/v1/memory/retention", headers=auth_headers).json()
     assert report["active_threads"] == 0

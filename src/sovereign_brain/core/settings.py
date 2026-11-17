@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     embedding_model: str = "nomic-embed-text:v1.5"
     embedding_dimensions: int = 768  # nomic-embed-text returns 768 numbers per text
     memory_min_score: float = 0.6
+    # Context window (Lab 40): older messages of a thread the model reads, at most
+    history_limit: int = 20
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

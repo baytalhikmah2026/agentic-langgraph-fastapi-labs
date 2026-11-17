@@ -1,4 +1,4 @@
-"""Conversation threads: look at what the Research Desk remembers (Labs 31-37)."""
+"""Conversation threads: look at what the Research Desk remembers (Labs 31-40)."""
 
 import logging
 from datetime import UTC, datetime
@@ -6,12 +6,19 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 
-from sovereign_brain.api.v1.research import Registry, ResearchGraph, RunContext, run_config
+from sovereign_brain.api.v1.research import (
+    Archivist,
+    Registry,
+    ResearchGraph,
+    RunContext,
+    run_config,
+)
 from sovereign_brain.core.rate_limit import model_call_gate
 from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.memory.corrections import CORRECTABLE_NEXT, correct_question
 from sovereign_brain.memory.threads import THREAD_ID_PATTERN, thread_config, thread_key
+from sovereign_brain.schemas.memory import ArchiveResult
 from sovereign_brain.schemas.research import ResearchResponse
 from sovereign_brain.schemas.thread import (
     CheckpointSummary,
@@ -238,3 +245,23 @@ async def delete_thread(
     await graph.checkpointer.adelete_thread(key)
     await registry.forget(key)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{thread_id}/archive", dependencies=[Depends(model_call_gate)])
+async def archive_thread(
+    thread_id: ThreadId,
+    graph: ResearchGraph,
+    user: CurrentUser,
+    registry: Registry,
+    archivist: Archivist,
+) -> ArchiveResult:
+    """Summarise one of your threads into semantic memory, then erase it (Lab 40)."""
+    if archivist is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Semantic memory is switched off")
+    key = thread_key(user.username, thread_id)
+    summary = await archivist.archive(graph, key)
+    if summary is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Thread {thread_id} not found")
+    await graph.checkpointer.adelete_thread(key)
+    await registry.forget(key)
+    return ArchiveResult(thread_id=thread_id, summary=summary)

@@ -18,3 +18,4 @@ class ResearchContext:
     max_revisions: int = 2  # how often the review may send a draft back
     router: Literal["rules", "model"] = "rules"  # who chooses the track (Lab 30)
     memory: SemanticMemory | None = None  # long-term memory in Qdrant; None = off (Lab 38)
+    history_limit: int = 20  # older thread messages the model reads, at most (Lab 40)
