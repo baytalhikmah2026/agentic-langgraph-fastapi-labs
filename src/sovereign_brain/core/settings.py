@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     market_api_token: SecretStr = SecretStr("local-market-token-change-me")
     # Code sandbox (Lab 47): where the run_python tool sends checked code
     sandbox_url: str = "http://localhost:8200"
+    # Long documents (Lab 57): where they live, piece size, collapse size, readers at once
+    documents_dir: str = "data/documents"
+    map_chunk_chars: int = 1200
+    map_collapse_chars: int = 2000
+    map_max_concurrency: int = 4
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

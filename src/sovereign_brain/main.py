@@ -17,6 +17,7 @@ from sovereign_brain.api.v1 import (
     auth,
     cases,
     clients,
+    documents,
     graphs,
     health,
     memory,
@@ -37,6 +38,7 @@ from sovereign_brain.graphs.report import build_report_graph
 from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.graphs.team.briefing import build_briefing_graph
 from sovereign_brain.graphs.team.critic import build_critic_graph
+from sovereign_brain.graphs.team.mapreduce import build_mapreduce_graph
 from sovereign_brain.graphs.team.network import build_network_graph
 from sovereign_brain.graphs.team.planner import build_planner_graph
 from sovereign_brain.graphs.team.supervisor import build_team_graph
@@ -105,6 +107,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.critic_graph = build_critic_graph(model)
         # Plan-and-execute (Lab 56): long tasks flown step by step, replanned on failure
         app.state.planner_graph = build_planner_graph(model, extra_tools=app.state.mcp_tools)
+        # Map-reduce (Lab 57): many readers at once for one long document
+        app.state.mapreduce_graph = build_mapreduce_graph(
+            model, chunk_chars=settings.map_chunk_chars, collapse_chars=settings.map_collapse_chars
+        )
         # Thread expiry (Lab 34): a background task that runs as long as the API runs
         worker = asyncio.create_task(
             cleanup_worker(
@@ -143,6 +149,7 @@ def create_app() -> FastAPI:
     app.include_router(assistant.router)
     app.include_router(team.router)
     app.include_router(cases.router)
+    app.include_router(documents.router)
     return app
 
 
