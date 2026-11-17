@@ -16,6 +16,7 @@ Lab 40: the model reads only the newest part of a long thread (trim_messages).
 Lab 42: the model is offered the whole tool wall: portfolio tools plus the stress test.
 Lab 43: a failing tool becomes a message; the model may retry, up to max_tool_retries.
 Lab 44: tools discovered on MCP servers join the wall (extra_tools).
+Lab 45: the analyst may read the desk's research notes (notes MCP server).
 """
 
 import logging
@@ -59,6 +60,8 @@ RESEARCH_PROMPT = (
     "quote only the figures they return. "
     "For a 'what if prices fall' question, call sector_exposure first, then stress_test "
     "with the figures it returned. "
+    "When the question is about the desk's views or research notes, call list_notes and "
+    "read_note if you have them, and say which note you used. "
     "Answer in at most three sentences. "
     "If the tools have no data, say which data you would check."
 )

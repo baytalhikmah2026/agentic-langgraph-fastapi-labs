@@ -20,3 +20,6 @@ reports/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Audit files of the MCP servers (Lab 45)
+data/audit/

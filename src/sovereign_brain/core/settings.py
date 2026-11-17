@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # Context window (Lab 40): older messages of a thread the model reads, at most
     history_limit: int = 20
     # MCP servers the API starts at start-up (Lab 44); an empty list switches MCP off
-    mcp_servers: list[str] = ["desk"]
+    mcp_servers: list[str] = ["desk", "notes"]
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

@@ -61,6 +61,13 @@ Set `SB_SEMANTIC_MEMORY=false` in `.env` to switch it off.
 Before a thread expires, it is summarised into Qdrant as a knowledge nugget (Lab 40);
 `POST /v1/threads/{thread_id}/archive` does it right away.
 
+## MCP servers (Labs 44-45)
+
+The API starts its MCP servers as small processes and adds their tools to the agent:
+`desk` (risk limits, glossary) and `notes` (the research notes in data/research_notes,
+behind a path jail). Every MCP call is written to the audit log; every note read or change
+also goes to data/audit/notes_audit.jsonl. Choose the servers with `SB_MCP_SERVERS` in `.env`.
+
 ## Graph diagram (Lab 27)
 
 The research graph's diagram lives in docs/research_graph.md (GitHub draws it).

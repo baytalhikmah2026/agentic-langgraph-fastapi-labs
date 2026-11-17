@@ -23,6 +23,7 @@ audit = logging.getLogger("sovereign_brain.audit.mcp")
 # The MCP servers the API can start: name -> the Python module that runs the server
 MCP_SERVERS = {
     "desk": "sovereign_brain.mcp_servers.desk",
+    "notes": "sovereign_brain.mcp_servers.notes",  # Lab 45
 }
 
 
