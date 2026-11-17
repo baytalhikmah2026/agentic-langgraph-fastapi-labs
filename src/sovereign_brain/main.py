@@ -12,7 +12,16 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sovereign_brain import __version__
-from sovereign_brain.api.v1 import auth, clients, graphs, health, memory, research, threads
+from sovereign_brain.api.v1 import (
+    auth,
+    clients,
+    graphs,
+    health,
+    memory,
+    research,
+    threads,
+    tools,
+)
 from sovereign_brain.core.cache import ResearchCache
 from sovereign_brain.core.errors import register_exception_handlers
 from sovereign_brain.core.logging import configure_logging
@@ -95,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(graphs.router)
     app.include_router(threads.router)
     app.include_router(memory.router)
+    app.include_router(tools.router)
     return app
 
 

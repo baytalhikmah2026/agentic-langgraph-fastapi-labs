@@ -14,7 +14,7 @@ graph TD;
 	recall(recall)
 	classify(classify)
 	analyse(analyse)
-	tools(tools<hr/><small><em>__tools = get_positions, sector_exposure</em></small>)
+	tools(tools<hr/><small><em>__tools = get_positions, sector_exposure, stress_test</em></small>)
 	explain(explain)
 	review(review)
 	remember(remember)

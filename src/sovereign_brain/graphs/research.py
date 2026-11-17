@@ -13,6 +13,7 @@ Lab 37: write_brief is shared with corrections, which rewrite a brief in an earl
 Lab 38: remember stores every finished answer in semantic memory (Qdrant), if it is on.
 Lab 39: recall finds related earlier answers; the model reads them next to the thread.
 Lab 40: the model reads only the newest part of a long thread (trim_messages).
+Lab 42: the model is offered the whole tool wall: portfolio tools plus the stress test.
 """
 
 import logging
@@ -41,7 +42,7 @@ from sovereign_brain.graphs.review import unsupported_figures
 from sovereign_brain.graphs.routing import ROUTER_PROMPT, Route, RouteDecision, classify_question
 from sovereign_brain.graphs.trail import TrailEntry, mark
 from sovereign_brain.memory.semantic import MemoryRecord, Recollection
-from sovereign_brain.tools.portfolio import PORTFOLIO_TOOLS
+from sovereign_brain.tools.registry import RESEARCH_TOOLS
 
 logger = logging.getLogger("sovereign_brain.research")
 
@@ -49,6 +50,8 @@ RESEARCH_PROMPT = (
     "You are an analyst on the Research Desk of Crescent Ledger Bank. "
     "For questions about a client's holdings or exposure, call the tools first and "
     "quote only the figures they return. "
+    "For a 'what if prices fall' question, call sector_exposure first, then stress_test "
+    "with the figures it returned. "
     "Answer in at most three sentences. "
     "If the tools have no data, say which data you would check."
 )
@@ -245,7 +248,7 @@ def build_research_graph(
 
     With a checkpointer (Lab 31), every run must name a thread in its configuration.
     """
-    model_with_tools = model.bind_tools(PORTFOLIO_TOOLS)
+    model_with_tools = model.bind_tools(RESEARCH_TOOLS)
     router = model.with_structured_output(RouteDecision)
 
     async def choose_route(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
@@ -299,7 +302,7 @@ def build_research_graph(
     builder.add_node("recall", recall)
     builder.add_node("classify", choose_route)
     builder.add_node("analyse", analyse)
-    builder.add_node("tools", ToolNode(PORTFOLIO_TOOLS))  # act: run the requested tools
+    builder.add_node("tools", ToolNode(RESEARCH_TOOLS))  # act: run the requested tools
     builder.add_node("explain", explain)
     builder.add_node("review", review)
     builder.add_node("remember", remember)

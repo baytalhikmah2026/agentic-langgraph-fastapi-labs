@@ -12,6 +12,7 @@ from sovereign_brain.graphs.routing import classify_question
         ("What does a moderate risk profile mean?", "general"),
         ("Explain what a government bond is.", "general"),
         ("Is it a mistake to hold cash?", "general"),
+        ("Stress the energy stocks with a 40% fall.", "portfolio"),
     ],
 )
 def test_questions_are_routed_by_their_words(question: str, route: str) -> None:
