@@ -10,7 +10,8 @@ DOCUMENT = Path(__file__).parents[2] / "docs" / "research_graph.md"
 def test_the_diagram_shows_every_station(make_model: Callable) -> None:
     text = mermaid(build_research_graph(make_model([])))
 
-    for station in ["intake", "classify", "analyse", "tools", "explain", "review", "remember"]:
+    stations = ["intake", "recall", "classify", "analyse", "tools", "explain", "review", "remember"]
+    for station in stations:
         assert f"\t{station}({station}" in text  # tools also lists its tool names
     assert "-." in text  # conditional edges are drawn dotted
 

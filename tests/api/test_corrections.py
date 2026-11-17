@@ -10,7 +10,7 @@ def test_a_question_can_be_corrected_at_an_earlier_checkpoint(
 ) -> None:
     client.post("/v1/research", json=REQUEST, headers=auth_headers)
     history = client.get("/v1/threads/bond-basics/history", headers=auth_headers).json()
-    after_intake = next(c for c in history if c["next"] == ["classify"])
+    after_intake = next(c for c in history if c["next"] == ["recall"])
 
     response = client.post(
         "/v1/threads/bond-basics/correct",

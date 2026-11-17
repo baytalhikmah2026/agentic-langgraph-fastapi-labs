@@ -14,7 +14,7 @@ def test_the_history_lists_every_checkpoint(
 
     assert response.status_code == 200
     history = response.json()
-    assert [c["step"] for c in history] == [4, 3, 2, 1, 0, -1]
+    assert [c["step"] for c in history] == [5, 4, 3, 2, 1, 0, -1]
     assert history[0]["next"] == []
     assert history[0]["answer"] == fake_answer
     assert history[0]["parent_checkpoint_id"] == history[1]["checkpoint_id"]

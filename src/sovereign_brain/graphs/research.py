@@ -11,6 +11,7 @@ Lab 30: the model chooses the track (structured output); the word rules are the 
 Lab 31: a checkpointer keeps each thread's state, so follow-ups continue a conversation.
 Lab 37: write_brief is shared with corrections, which rewrite a brief in an earlier checkpoint.
 Lab 38: remember stores every finished answer in semantic memory (Qdrant), if it is on.
+Lab 39: recall finds related earlier answers; the model reads them next to the thread.
 """
 
 import logging
@@ -26,12 +27,13 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.runtime import Runtime
+from pydantic import ValidationError
 
 from sovereign_brain.graphs.context import ResearchContext
 from sovereign_brain.graphs.review import unsupported_figures
 from sovereign_brain.graphs.routing import ROUTER_PROMPT, Route, RouteDecision, classify_question
 from sovereign_brain.graphs.trail import TrailEntry, mark
-from sovereign_brain.memory.semantic import MemoryRecord
+from sovereign_brain.memory.semantic import MemoryRecord, Recollection
 from sovereign_brain.tools.portfolio import PORTFOLIO_TOOLS
 
 logger = logging.getLogger("sovereign_brain.research")
@@ -42,6 +44,10 @@ RESEARCH_PROMPT = (
     "quote only the figures they return. "
     "Answer in at most three sentences. "
     "If the tools have no data, say which data you would check."
+)
+MEMORY_NOTE = (
+    "Notes from this analyst's earlier conversations about this client. They may be out "
+    "of date: use them for context only, and take every figure from the tools.\n"
 )
 
 
@@ -71,6 +77,7 @@ class ResearchState(ResearchInput):
     answer: str  # overwritten: the latest answer
     revisions: int  # overwritten: how often the review sent the draft back (Lab 24)
     checked: bool | None  # overwritten: True when every figure was found; None until checked
+    recollections: list[dict]  # overwritten: related answers from other threads (Lab 39)
 
 
 def write_brief(client_id: str, client_profile: str, question: str) -> str:
@@ -94,7 +101,52 @@ def intake(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
         "status": "received",
         "revisions": 0,
         "checked": None,
+        "recollections": [],  # each question looks up its own memories (Lab 39)
     }
+
+
+async def recall(
+    state: ResearchState, config: RunnableConfig, runtime: Runtime[ResearchContext]
+) -> dict:
+    """Look up related answers from earlier conversations (Lab 39). Memory off: nothing to do.
+
+    Answers from this same thread are left out: the thread already remembers them.
+    """
+    memory = runtime.context.memory
+    if memory is None:
+        return {}
+    this_thread = config["configurable"].get("thread_id", "").partition(":")[2]
+    try:
+        found = await memory.recall(runtime.context.analyst, state["client_id"], state["question"])
+    except Exception as error:  # without memory the desk still answers, just without notes
+        logger.warning("Semantic memory not available for recall: %r", error)
+        return {"trail": mark("recall", f"Memory not available: {type(error).__name__}")}
+    related = [r for r in found if r.thread_id != this_thread]
+    note = f"Related answers from earlier conversations: {len(related)}"
+    return {
+        "recollections": [r.model_dump(mode="json") for r in related],
+        "trail": mark("recall", note),
+    }
+
+
+def with_memory(state: ResearchState) -> list[AnyMessage]:
+    """What the model reads: the thread's messages, plus a note of related earlier answers.
+
+    The note sits just before the newest question. It is built for each model call and never
+    saved in the thread, so the conversation does not grow with old notes (Lab 39).
+    """
+    messages = list(state["messages"])
+    notes = []
+    for item in state.get("recollections") or []:
+        try:
+            notes.append(Recollection.model_validate(item))
+        except ValidationError:  # only well-formed memories may reach the model
+            logger.warning("A recollection was left out: it does not match MemoryRecord")
+    if not notes:
+        return messages
+    lines = "\n".join(f"- {n.saved_at:%Y-%m-%d} Q: {n.question} A: {n.answer}" for n in notes)
+    newest = max(i for i, m in enumerate(messages) if m.type == "human" and m.name != "reviewer")
+    return [*messages[:newest], SystemMessage(MEMORY_NOTE + lines), *messages[newest:]]
 
 
 def classify(state: ResearchState) -> dict:
@@ -199,7 +251,7 @@ def build_research_graph(
 
     async def analyse(state: ResearchState) -> dict:
         """Reason: the model either asks for tools or writes a draft answer."""
-        reply = await model_with_tools.ainvoke(state["messages"])
+        reply = await model_with_tools.ainvoke(with_memory(state))
         if reply.tool_calls:
             names = ", ".join(call["name"] for call in reply.tool_calls)
             return {"messages": [reply], "trail": mark("analyse", f"Asked for tools: {names}")}
@@ -212,7 +264,7 @@ def build_research_graph(
 
     async def explain(state: ResearchState) -> dict:
         """Answer a general question directly: no tools, one model call."""
-        reply = await model.ainvoke(state["messages"])
+        reply = await model.ainvoke(with_memory(state))
         return {
             "messages": [reply],
             "trail": mark("explain", "General answer written"),
@@ -227,6 +279,7 @@ def build_research_graph(
         output_schema=ResearchOutput,
     )
     builder.add_node("intake", intake)
+    builder.add_node("recall", recall)
     builder.add_node("classify", choose_route)
     builder.add_node("analyse", analyse)
     builder.add_node("tools", ToolNode(PORTFOLIO_TOOLS))  # act: run the requested tools
@@ -234,7 +287,8 @@ def build_research_graph(
     builder.add_node("review", review)
     builder.add_node("remember", remember)
     builder.add_edge(START, "intake")
-    builder.add_edge("intake", "classify")
+    builder.add_edge("intake", "recall")
+    builder.add_edge("recall", "classify")
     builder.add_conditional_edges(
         "classify", pick_track, {"portfolio": "analyse", "general": "explain"}
     )

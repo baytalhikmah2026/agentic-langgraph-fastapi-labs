@@ -205,13 +205,13 @@ async def correct_thread(
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             f"Checkpoint {body.checkpoint_id} is not right after intake; "
-            "choose the checkpoint whose next station is classify",
+            "choose the checkpoint whose next station is recall",
         )
     client_id = snapshot.values["client_id"]
     logger.info("Correcting thread %s at step %s", thread_id, snapshot.metadata["step"])
     await registry.touch(key, user.username, thread_id, client_id)
     corrected = await correct_question(graph, snapshot, body.question, user.username)
-    # Run from the corrected checkpoint: classify and everything after it run again
+    # Run from the corrected checkpoint: every station after intake runs again
     config["configurable"]["checkpoint_id"] = corrected["configurable"]["checkpoint_id"]
     result = await graph.ainvoke(None, config=config, context=context)
     return ResearchResponse(

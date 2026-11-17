@@ -14,7 +14,7 @@ from sovereign_brain.graphs.research import write_brief
 from sovereign_brain.graphs.trail import mark
 
 # A question can be corrected right after intake: it has been read, nothing is decided yet
-CORRECTABLE_NEXT = ("classify",)
+CORRECTABLE_NEXT = ("recall",)  # since Lab 39, recall follows intake
 
 
 def latest_brief(messages: list[AnyMessage]) -> AnyMessage:
@@ -42,5 +42,5 @@ async def correct_question(
             "messages": [new_brief],
             "trail": mark("intake", f"Question corrected by {analyst}"),
         },
-        as_node="intake",  # as if intake had read the corrected question: classify runs next
+        as_node="intake",  # as if intake had read the corrected question: recall runs next
     )

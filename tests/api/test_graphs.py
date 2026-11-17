@@ -11,6 +11,7 @@ def test_the_research_state_is_described(
     assert body["graph"] == "research"
     assert body["nodes"] == [
         "intake",
+        "recall",
         "classify",
         "analyse",
         "tools",

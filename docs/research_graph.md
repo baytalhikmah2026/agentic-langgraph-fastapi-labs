@@ -11,6 +11,7 @@ config:
 graph TD;
 	__start__([<p>__start__</p>]):::first
 	intake(intake)
+	recall(recall)
 	classify(classify)
 	analyse(analyse)
 	tools(tools<hr/><small><em>__tools = get_positions, sector_exposure</em></small>)
@@ -24,7 +25,8 @@ graph TD;
 	classify -. &nbsp;portfolio&nbsp; .-> analyse;
 	classify -. &nbsp;general&nbsp; .-> explain;
 	explain --> remember;
-	intake --> classify;
+	intake --> recall;
+	recall --> classify;
 	review -. &nbsp;revise&nbsp; .-> analyse;
 	review -. &nbsp;done&nbsp; .-> remember;
 	tools --> analyse;

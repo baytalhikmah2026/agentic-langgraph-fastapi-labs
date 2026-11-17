@@ -24,13 +24,13 @@ async def test_a_corrected_question_runs_on_a_new_branch(make_model: Callable) -
     config = thread_config(thread_key("amina", "basics"))
     await graph.ainvoke(QUESTION, config=config, context=CONTEXT)
     history = [snapshot async for snapshot in graph.aget_state_history(config)]
-    after_intake = next(s for s in history if s.next == ("classify",))
+    after_intake = next(s for s in history if s.next == ("recall",))
 
     corrected = await correct_question(graph, after_intake, "What is a share?", "amina")
 
     update = await graph.aget_state(corrected)
     assert update.metadata["source"] == "update"
-    assert update.next == ("classify",)
+    assert update.next == ("recall",)
     parent = update.parent_config["configurable"]["checkpoint_id"]
     assert parent == after_intake.config["configurable"]["checkpoint_id"]
     result = await graph.ainvoke(None, config=corrected, context=CONTEXT)

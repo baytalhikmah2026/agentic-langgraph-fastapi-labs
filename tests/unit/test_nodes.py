@@ -74,7 +74,9 @@ def assert_update(update: dict, expected_keys: set[str]) -> None:
 def test_intake_returns_its_delta(runtime: Runtime[ResearchContext]) -> None:
     update = intake(mock_state(""), runtime)
 
-    assert_update(update, {"messages", "trail", "status", "revisions", "checked"})
+    assert_update(
+        update, {"messages", "trail", "status", "revisions", "checked", "recollections"}
+    )
 
 
 def test_classify_writes_only_the_route_and_the_trail() -> None:
