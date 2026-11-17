@@ -15,10 +15,12 @@ Lab 39: recall finds related earlier answers; the model reads them next to the t
 Lab 40: the model reads only the newest part of a long thread (trim_messages).
 Lab 42: the model is offered the whole tool wall: portfolio tools plus the stress test.
 Lab 43: a failing tool becomes a message; the model may retry, up to max_tool_retries.
+Lab 44: tools discovered on MCP servers join the wall (extra_tools).
 """
 
 import logging
 import operator
+from collections.abc import Sequence
 from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.language_models import BaseChatModel
@@ -32,6 +34,7 @@ from langchain_core.messages import (
     trim_messages,
 )
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
@@ -257,13 +260,17 @@ async def remember(
 
 
 def build_research_graph(
-    model: BaseChatModel, checkpointer: BaseCheckpointSaver | None = None
+    model: BaseChatModel,
+    checkpointer: BaseCheckpointSaver | None = None,
+    extra_tools: Sequence[BaseTool] = (),
 ) -> CompiledStateGraph:
     """Built once at start-up; each run brings its own ResearchContext.
 
     With a checkpointer (Lab 31), every run must name a thread in its configuration.
+    `extra_tools` are added to the tool wall, for example the tools of MCP servers (Lab 44).
     """
-    model_with_tools = model.bind_tools(RESEARCH_TOOLS)
+    tools = [*RESEARCH_TOOLS, *extra_tools]
+    model_with_tools = model.bind_tools(tools)
     router = model.with_structured_output(RouteDecision)
 
     async def choose_route(state: ResearchState, runtime: Runtime[ResearchContext]) -> dict:
@@ -338,7 +345,7 @@ def build_research_graph(
     builder.add_node("classify", choose_route)
     builder.add_node("analyse", analyse)
     # act: run the requested tools; a failing tool answers with an error message (Lab 43)
-    builder.add_node("tools", ToolNode(RESEARCH_TOOLS, handle_tool_errors=tool_error_message))
+    builder.add_node("tools", ToolNode(tools, handle_tool_errors=tool_error_message))
     builder.add_node("explain", explain)
     builder.add_node("review", review)
     builder.add_node("remember", remember)

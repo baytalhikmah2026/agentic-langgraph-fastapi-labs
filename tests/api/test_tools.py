@@ -1,6 +1,7 @@
-"""The tool list endpoint (Lab 42)."""
+"""The tool list endpoint (Labs 42, 44)."""
 
 from fastapi.testclient import TestClient
+from langchain_core.tools import StructuredTool
 
 
 def test_the_api_lists_every_tool_with_its_form(
@@ -17,3 +18,23 @@ def test_the_api_lists_every_tool_with_its_form(
 
 def test_the_tool_list_needs_a_token(client: TestClient) -> None:
     assert client.get("/v1/tools").status_code == 401
+
+
+async def define(term: str) -> str:
+    """A plain-words definition of a finance term."""
+    return "A loan to a company or government."
+
+
+def test_mcp_tools_are_listed_after_our_own(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    client.app.state.mcp_tools = [StructuredTool.from_function(coroutine=define, name="glossary")]
+
+    tools = client.get("/v1/tools", headers=auth_headers).json()
+
+    assert [(tool["name"], tool["source"]) for tool in tools] == [
+        ("get_positions", "local"),
+        ("sector_exposure", "local"),
+        ("stress_test", "local"),
+        ("glossary", "mcp"),
+    ]

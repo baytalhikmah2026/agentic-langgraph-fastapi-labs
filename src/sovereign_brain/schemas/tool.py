@@ -1,4 +1,6 @@
-"""How the API describes a tool (Lab 42)."""
+"""How the API describes a tool (Labs 42, 44)."""
+
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -9,3 +11,4 @@ class ToolInfo(BaseModel):
     name: str
     description: str
     parameters: dict
+    source: Literal["local", "mcp"] = "local"  # our own code, or an MCP server (Lab 44)

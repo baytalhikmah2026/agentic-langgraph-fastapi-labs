@@ -36,6 +36,7 @@ from sovereign_brain.memory.retention import ThreadRegistry, cleanup_worker
 from sovereign_brain.memory.semantic import SemanticMemory
 from sovereign_brain.memory.summaries import ThreadArchivist
 from sovereign_brain.services.portfolio import PortfolioService
+from sovereign_brain.tools.mcp_host import load_mcp_tools
 
 logger = logging.getLogger("sovereign_brain")
 
@@ -67,9 +68,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Semantic memory: Qdrant at %s", settings.qdrant_url)
         # Knowledge nuggets (Lab 40): threads are summarised into memory before they expire
         app.state.archivist = ThreadArchivist(model, app.state.memory)
+    # MCP servers (Lab 44): their tools are discovered once and join the tool wall
+    app.state.mcp_tools = await load_mcp_tools(settings)
     # Thread memory (Lab 32): the checkpointer stays open while the API runs
     async with open_checkpointer(settings) as checkpointer:
-        app.state.research_graph = build_research_graph(model, checkpointer=checkpointer)
+        app.state.research_graph = build_research_graph(
+            model, checkpointer=checkpointer, extra_tools=app.state.mcp_tools
+        )
         logger.info("Research graph ready (model %s)", settings.llm_model)
         # Thread expiry (Lab 34): a background task that runs as long as the API runs
         worker = asyncio.create_task(

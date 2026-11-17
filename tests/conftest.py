@@ -1,4 +1,4 @@
-"""Shared test fixtures: one place that builds the test application (Labs 17-40)."""
+"""Shared test fixtures: one place that builds the test application (Labs 17-44)."""
 
 import asyncio
 import itertools
@@ -27,6 +27,7 @@ from sovereign_brain.api.v1.research import (
 from sovereign_brain.core.cache import ResearchCache
 from sovereign_brain.core.rate_limit import limiter
 from sovereign_brain.core.security import hash_password
+from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.base import Base
 from sovereign_brain.db.models import Client, Position, User
 from sovereign_brain.db.session import get_session
@@ -155,6 +156,12 @@ def password() -> str:
 def reset_rate_limits() -> None:
     """Every test starts with empty rate-limit counters."""
     limiter.reset()
+
+
+@pytest.fixture(autouse=True)
+def no_mcp_servers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests start no MCP server processes (Lab 44); MCP tests build their own."""
+    monkeypatch.setattr(get_settings(), "mcp_servers", [])
 
 
 @pytest.fixture(autouse=True)
