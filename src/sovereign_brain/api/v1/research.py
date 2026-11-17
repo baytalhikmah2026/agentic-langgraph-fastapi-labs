@@ -82,6 +82,7 @@ def research_context(
         memory=memory,
         history_limit=settings.history_limit,
         max_tool_retries=settings.max_tool_retries,
+        max_team_turns=settings.team_max_turns,
     )
 
 

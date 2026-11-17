@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     max_revisions: int = 2
     # Tool errors (Lab 43): how many failed tool calls one question may have before giving up
     max_tool_retries: int = 2
+    # Agent teams (Lab 51): how many decisions the supervisor may make for one request
+    team_max_turns: int = 6
     # Who chooses the research track (Lab 30): the model, or the word rules only
     research_router: Literal["rules", "model"] = "model"
 
