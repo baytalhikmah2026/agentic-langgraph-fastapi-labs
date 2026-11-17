@@ -1,14 +1,18 @@
-"""Team cases (Lab 54): work saved by one graph, picked up by another through the bridge."""
+"""Team cases (Labs 54-55): work saved by one graph, picked up, briefed and reviewed by others."""
 
 import logging
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import ValidationError
 
+from sovereign_brain.api.v1.research import RunContext
 from sovereign_brain.api.v1.team import NetworkGraph
+from sovereign_brain.core.errors import MODEL_ERRORS
 from sovereign_brain.core.rate_limit import model_call_gate
 from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.graphs.team.bridge import CaseFile, CaseNotFound, export_case
@@ -26,6 +30,14 @@ def get_briefing_graph(request: Request) -> CompiledStateGraph:
 
 
 BriefingGraph = Annotated[CompiledStateGraph, Depends(get_briefing_graph)]
+
+
+def get_critic_graph(request: Request) -> CompiledStateGraph:
+    """The writer-and-critic graph built once at start-up (Lab 55)."""
+    return request.app.state.critic_graph
+
+
+CriticGraph = Annotated[CompiledStateGraph, Depends(get_critic_graph)]
 
 
 async def checked_case(case_id: CaseId, network: NetworkGraph, user: CurrentUser) -> CaseFile:
@@ -62,3 +74,26 @@ async def write_briefing(case: Case, graph: BriefingGraph, user: CurrentUser) ->
         briefing=result["briefing"],
         created_at=datetime.now(UTC),
     )
+
+
+@router.post(
+    "/{case_id}/review", response_class=EventSourceResponse, dependencies=[Depends(model_call_gate)]
+)
+async def review_case(
+    case: Case, graph: CriticGraph, context: RunContext
+) -> AsyncIterator[ServerSentEvent]:
+    """The final answer, drafted and criticised until it is right, streamed round by round."""
+    final = {"draft": "", "verdict": "", "rounds": 0}
+    try:
+        async for update in graph.astream(
+            {"case": case.model_dump()}, context=context, stream_mode="updates"
+        ):
+            for change in update.values():
+                for entry in change.get("history", []):  # the internal monologue, as it happens
+                    yield ServerSentEvent(event=entry["step"], data=entry)
+                final.update({k: v for k, v in change.items() if k in final})
+    except MODEL_ERRORS as error:
+        logger.error("AI model not available during the case review: %r", error)
+        yield ServerSentEvent(event="error", data={"error": "model_unavailable"})
+        return
+    yield ServerSentEvent(event="final", data={"case_id": case.case_id, **final})

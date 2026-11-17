@@ -36,6 +36,7 @@ from sovereign_brain.db.session import create_engine
 from sovereign_brain.graphs.report import build_report_graph
 from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.graphs.team.briefing import build_briefing_graph
+from sovereign_brain.graphs.team.critic import build_critic_graph
 from sovereign_brain.graphs.team.network import build_network_graph
 from sovereign_brain.graphs.team.supervisor import build_team_graph
 from sovereign_brain.llm.factory import get_chat_model, get_embeddings
@@ -99,6 +100,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         # A second graph that picks up saved cases through the bridge (Lab 54)
         app.state.briefing_graph = build_briefing_graph(model, checkpointer=shared_store)
+        # The writer and its critic (Lab 55): no answer leaves before it passes review
+        app.state.critic_graph = build_critic_graph(model)
         # Thread expiry (Lab 34): a background task that runs as long as the API runs
         worker = asyncio.create_task(
             cleanup_worker(
