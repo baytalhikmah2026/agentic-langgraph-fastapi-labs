@@ -160,8 +160,9 @@ def reset_rate_limits() -> None:
 
 @pytest.fixture(autouse=True)
 def no_mcp_servers(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Tests start no MCP server processes (Lab 44); MCP tests build their own."""
+    """Tests start no MCP server processes (Labs 44, 60); MCP tests build their own."""
     monkeypatch.setattr(get_settings(), "mcp_servers", [])
+    monkeypatch.setattr(get_settings(), "agency_mcp_servers", [])
 
 
 @pytest.fixture(autouse=True)

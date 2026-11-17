@@ -1,0 +1,3 @@
+{
+  "request": "Write a Python function weights(values) that turns a dictionary of sector values into each sector's percent of the total, rounded to one decimal."
+}

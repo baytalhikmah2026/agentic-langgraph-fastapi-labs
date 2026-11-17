@@ -77,6 +77,14 @@ and `done`. Every event is a Pydantic model (schemas/assistant.py). Questions th
 "report" use the report graph (`POST /v1/reports/{client_id}`, Lab 49); everything else uses
 the research graph with all its tools and MCP servers.
 
+## Software Development Agency (Lab 60)
+
+`POST /v1/agency` runs one development cycle: a project manager writes a spec (file name,
+requirements, a short check), a developer writes the file into data/workspace through the
+workspace MCP server, and a reviewer runs the file with the check in the sandbox (Lab 47)
+until it prints PASS or the rounds run out (SB_MAX_REVISIONS). Only the developer can write
+to the workspace: its MCP server is not on the shared tool wall (SB_AGENCY_MCP_SERVERS).
+
 ## Graph diagram (Lab 27)
 
 The research graph's diagram lives in docs/research_graph.md (GitHub draws it).

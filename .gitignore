@@ -23,3 +23,7 @@ Thumbs.db
 
 # Audit files of the MCP servers (Lab 45)
 data/audit/
+
+# Files written by the software agency (Lab 60)
+data/workspace/*
+!data/workspace/README.md

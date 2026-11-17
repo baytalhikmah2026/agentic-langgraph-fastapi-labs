@@ -26,6 +26,7 @@ MCP_SERVERS = {
     "desk": "sovereign_brain.mcp_servers.desk",
     "notes": "sovereign_brain.mcp_servers.notes",  # Lab 45
     "market": "sovereign_brain.mcp_servers.market",  # Lab 46
+    "workspace": "sovereign_brain.mcp_servers.workspace",  # Lab 60: the agency only
 }
 
 
@@ -83,12 +84,16 @@ async def audit_tool_call(
         )
 
 
-async def load_mcp_tools(settings: Settings) -> list[BaseTool]:
-    """Discover the tools of every enabled MCP server; none if they cannot be reached."""
-    if not settings.mcp_servers:
+async def load_mcp_tools(settings: Settings, names: list[str] | None = None) -> list[BaseTool]:
+    """Discover the tools of the given MCP servers (default: SB_MCP_SERVERS); none if unreachable.
+
+    Lab 60: a team can get its own servers (the agency's workspace), apart from the tool wall.
+    """
+    names = settings.mcp_servers if names is None else names
+    if not names:
         return []
     client = MultiServerMCPClient(
-        server_connections(settings.mcp_servers, settings), tool_interceptors=[audit_tool_call]
+        server_connections(names, settings), tool_interceptors=[audit_tool_call]
     )
     try:
         tools = await client.get_tools()

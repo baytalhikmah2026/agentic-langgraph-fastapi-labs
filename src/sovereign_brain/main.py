@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sovereign_brain import __version__
 from sovereign_brain.api.v1 import (
+    agency,
     assistant,
     auth,
     cases,
@@ -36,6 +37,7 @@ from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
 from sovereign_brain.graphs.report import build_report_graph
 from sovereign_brain.graphs.research import build_research_graph
+from sovereign_brain.graphs.team.agency import build_agency_graph
 from sovereign_brain.graphs.team.briefing import build_briefing_graph
 from sovereign_brain.graphs.team.critic import build_critic_graph
 from sovereign_brain.graphs.team.mapreduce import build_mapreduce_graph
@@ -83,6 +85,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.archivist = ThreadArchivist(model, app.state.memory)
     # MCP servers (Lab 44): their tools are discovered once and join the tool wall
     app.state.mcp_tools = await load_mcp_tools(settings)
+    # The agency's own workspace server (Lab 60): only the developer gets write access
+    app.state.agency_tools = await load_mcp_tools(settings, settings.agency_mcp_servers)
     # Thread memory (Lab 32): the checkpointer stays open while the API runs
     async with (
         open_checkpointer(settings) as checkpointer,
@@ -111,6 +115,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.mapreduce_graph = build_mapreduce_graph(
             model, chunk_chars=settings.map_chunk_chars, collapse_chars=settings.map_collapse_chars
         )
+        # The software agency (Lab 60): PM, developer (workspace MCP) and reviewer (sandbox)
+        app.state.agency_graph = build_agency_graph(model, app.state.agency_tools)
         # Thread expiry (Lab 34): a background task that runs as long as the API runs
         worker = asyncio.create_task(
             cleanup_worker(
@@ -150,6 +156,7 @@ def create_app() -> FastAPI:
     app.include_router(team.router)
     app.include_router(cases.router)
     app.include_router(documents.router)
+    app.include_router(agency.router)
     return app
 
 

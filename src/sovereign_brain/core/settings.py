@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     history_limit: int = 20
     # MCP servers the API starts at start-up (Lab 44); an empty list switches MCP off
     mcp_servers: list[str] = ["desk", "notes", "market"]
+    # The software agency's own MCP servers (Lab 60): kept off the shared tool wall
+    agency_mcp_servers: list[str] = ["workspace"]
     # Internal market-data API (Lab 46): only the market MCP server talks to it
     market_api_url: str = "http://localhost:8100"
     market_api_token: SecretStr = SecretStr("local-market-token-change-me")
