@@ -21,3 +21,4 @@ class ResearchContext:
     history_limit: int = 20  # older thread messages the model reads, at most (Lab 40)
     max_tool_retries: int = 2  # failed tool calls per question before giving up (Lab 43)
     max_team_turns: int = 6  # supervisor decisions per team request (Lab 51)
+    max_replans: int = 2  # new plans after failed steps, per planned task (Lab 56)

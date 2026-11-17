@@ -1,4 +1,4 @@
-"""The team endpoints (Labs 51-53)."""
+"""The team endpoints (Labs 51-56)."""
 
 import json
 from collections.abc import Callable
@@ -8,8 +8,9 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 from langchain_core.tools import StructuredTool
 
-from sovereign_brain.api.v1.team import get_network_graph, get_team_graph
+from sovereign_brain.api.v1.team import get_network_graph, get_planner_graph, get_team_graph
 from sovereign_brain.graphs.team.network import build_network_graph
+from sovereign_brain.graphs.team.planner import build_planner_graph
 from sovereign_brain.graphs.team.supervisor import build_team_graph
 
 
@@ -107,3 +108,26 @@ def test_the_network_streams_every_handoff(
     assert events[1] == ("answer", {"summary": "Energy is a modest 18.5% of the portfolio."})
     assert events[-1][0] == "done"
     assert events[-1][1]["client_id"] == "C-1042"
+
+
+def test_the_flight_plan_is_streamed_step_by_step(
+    app: FastAPI, client: TestClient, auth_headers: dict[str, str], make_model: Callable
+) -> None:
+    steps = {"steps": [{"goal": "Find the energy exposure."}]}
+    model = make_model(
+        [
+            AIMessage("", tool_calls=[{"name": "Plan", "args": steps, "id": "p1"}]),
+            AIMessage("Energy is 18.5% of the portfolio."),  # the executor
+            AIMessage("Energy is a modest 18.5% of the portfolio."),  # the finish station
+        ]
+    )
+    graph = build_planner_graph(model)
+    app.dependency_overrides[get_planner_graph] = lambda: graph
+    request = {"client_id": "C-1042", "question": "Prepare a short review of the energy holdings."}
+
+    response = client.post("/v1/team/plan", json=request, headers=auth_headers)
+
+    events = read_events(response.text)
+    assert [name for name, _ in events] == ["plan", "step", "answer", "done"]
+    assert events[0][1] == {"steps": ["Find the energy exposure."]}
+    assert events[1][1]["status"] == "done"

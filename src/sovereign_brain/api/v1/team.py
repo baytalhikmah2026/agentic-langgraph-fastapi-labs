@@ -41,6 +41,14 @@ def get_network_graph(request: Request) -> CompiledStateGraph:
 NetworkGraph = Annotated[CompiledStateGraph, Depends(get_network_graph)]
 
 
+def get_planner_graph(request: Request) -> CompiledStateGraph:
+    """The planner and its executor built once at start-up (Lab 56)."""
+    return request.app.state.planner_graph
+
+
+PlannerGraph = Annotated[CompiledStateGraph, Depends(get_planner_graph)]
+
+
 def team_config() -> dict:
     return {
         "recursion_limit": get_settings().graph_recursion_limit,
@@ -125,3 +133,26 @@ async def stream_network(
         return
     done = {"client_id": checked.body.client_id, "case_id": case_id}
     yield ServerSentEvent(event="done", data=done)
+
+
+@router.post("/plan", response_class=EventSourceResponse, dependencies=[Depends(model_call_gate)])
+async def stream_plan(
+    checked: Checked, graph: PlannerGraph, context: RunContext
+) -> AsyncIterator[ServerSentEvent]:
+    """The flight plan of a long task, live: plan, every step, every new plan, the answer."""
+    try:
+        async for update in graph.astream(
+            checked.graph_input, config=team_config(), context=context, stream_mode="updates"
+        ):
+            for station, change in update.items():
+                if station in ("plan", "replan"):
+                    yield ServerSentEvent(event=station, data={"steps": change["plan"]})
+                elif station == "execute":
+                    yield ServerSentEvent(event="step", data=change["completed"][0])
+                elif station == "finish":
+                    yield ServerSentEvent(event="answer", data={"summary": change["answer"]})
+    except MODEL_ERRORS as error:
+        logger.error("AI model not available during the planned task: %r", error)
+        yield ServerSentEvent(event="error", data={"error": "model_unavailable"})
+        return
+    yield ServerSentEvent(event="done", data={"client_id": checked.body.client_id})

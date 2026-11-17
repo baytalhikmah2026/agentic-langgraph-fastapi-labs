@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     max_tool_retries: int = 2
     # Agent teams (Lab 51): how many decisions the supervisor may make for one request
     team_max_turns: int = 6
+    # Plan-and-execute (Lab 56): how often a failed step may lead to a new plan
+    planner_max_replans: int = 2
     # Who chooses the research track (Lab 30): the model, or the word rules only
     research_router: Literal["rules", "model"] = "model"
 
