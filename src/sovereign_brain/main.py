@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sovereign_brain import __version__
 from sovereign_brain.api.v1 import (
+    assistant,
     auth,
     clients,
     graphs,
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(memory.router)
     app.include_router(tools.router)
     app.include_router(reports.router)
+    app.include_router(assistant.router)
     return app
 
 

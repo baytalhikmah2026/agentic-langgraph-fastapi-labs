@@ -69,6 +69,14 @@ behind a path jail) and `market` (prices from the internal market-data API, serv
 `market` on port 8100, protected by `SB_MARKET_API_TOKEN`). Every MCP call is written to the audit log; every note read or change
 also goes to data/audit/notes_audit.jsonl. Choose the servers with `SB_MCP_SERVERS` in `.env`.
 
+## Autonomous Research Assistant (Lab 50)
+
+`POST /v1/assistant` takes a research request and streams its work as Server-Sent Events:
+`plan` (research or report), `step`, `tool_call`, `tool_result`, then `answer` or `report`,
+and `done`. Every event is a Pydantic model (schemas/assistant.py). Questions that ask for a
+"report" use the report graph (`POST /v1/reports/{client_id}`, Lab 49); everything else uses
+the research graph with all its tools and MCP servers.
+
 ## Graph diagram (Lab 27)
 
 The research graph's diagram lives in docs/research_graph.md (GitHub draws it).
