@@ -18,6 +18,7 @@ from sovereign_brain.api.v1 import (
     graphs,
     health,
     memory,
+    reports,
     research,
     threads,
     tools,
@@ -29,6 +30,7 @@ from sovereign_brain.core.rate_limit import limiter
 from sovereign_brain.core.request_id import RequestIdMiddleware
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
+from sovereign_brain.graphs.report import build_report_graph
 from sovereign_brain.graphs.research import build_research_graph
 from sovereign_brain.llm.factory import get_chat_model, get_embeddings
 from sovereign_brain.memory.checkpoints import open_checkpointer
@@ -76,6 +78,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             model, checkpointer=checkpointer, extra_tools=app.state.mcp_tools
         )
         logger.info("Research graph ready (model %s)", settings.llm_model)
+        # Reports (Lab 49): a fixed protocol and a strict answer shape
+        app.state.report_graph = build_report_graph(model)
         # Thread expiry (Lab 34): a background task that runs as long as the API runs
         worker = asyncio.create_task(
             cleanup_worker(
@@ -110,6 +114,7 @@ def create_app() -> FastAPI:
     app.include_router(threads.router)
     app.include_router(memory.router)
     app.include_router(tools.router)
+    app.include_router(reports.router)
     return app
 
 
