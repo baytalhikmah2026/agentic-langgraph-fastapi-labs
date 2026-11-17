@@ -1,0 +1,6 @@
+# Linux only (Lab 47): run the code sandbox under gVisor's runsc runtime.
+# Use it together with compose.yaml:
+#   docker compose -f compose.yaml -f compose.gvisor.yaml up -d
+services:
+  sandbox:
+    runtime: runsc

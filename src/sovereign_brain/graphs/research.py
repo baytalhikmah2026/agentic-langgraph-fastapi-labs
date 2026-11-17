@@ -18,6 +18,7 @@ Lab 43: a failing tool becomes a message; the model may retry, up to max_tool_re
 Lab 44: tools discovered on MCP servers join the wall (extra_tools).
 Lab 45: the analyst may read the desk's research notes (notes MCP server).
 Lab 46: current prices come from the market-data MCP server, never from memory.
+Lab 47: calculations no tool covers are written as Python and run in the sandbox.
 """
 
 import logging
@@ -64,6 +65,8 @@ RESEARCH_PROMPT = (
     "When the question is about the desk's views or research notes, call list_notes and "
     "read_note if you have them, and say which note you used. "
     "For a current price, call get_quote if you have it; never take prices from memory notes. "
+    "For a calculation no other tool does, write short Python that prints the result and "
+    "call run_python. "
     "Answer in at most three sentences. "
     "If the tools have no data, say which data you would check."
 )

@@ -19,6 +19,7 @@ services:
       SB_CHECKPOINT_STORE: postgres
       SB_QDRANT_URL: http://qdrant:6333
       SB_MARKET_API_URL: http://market:8100
+      SB_SANDBOX_URL: http://sandbox:8200
     depends_on:
       ollama:
         condition: service_healthy
@@ -30,6 +31,11 @@ services:
         condition: service_healthy
       market:
         condition: service_healthy
+      sandbox:
+        condition: service_healthy
+    networks:
+      - default
+      - sandbox-net
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
@@ -58,6 +64,30 @@ services:
         required: false
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  sandbox:
+    # The code sandbox (Lab 47): locked down, reachable only from the API, no internet
+    build: .
+    image: sovereign-brain-api:dev
+    container_name: sb-sandbox
+    command: ["fastapi", "run", "src/sovereign_brain/sandbox/runner.py", "--host", "0.0.0.0", "--port", "8200"]
+    networks:
+      - sandbox-net
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 512m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8200/health')"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -137,6 +167,10 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+networks:
+  sandbox-net:
+    internal: true  # no route to the internet or the other services (Lab 47)
 
 volumes:
   ollama-models:

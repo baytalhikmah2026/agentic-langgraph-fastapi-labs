@@ -5,11 +5,12 @@ from sovereign_brain.tools.registry import RESEARCH_TOOLS, wire_format
 from sovereign_brain.tools.risk import stress_test_tool
 
 
-def test_the_wall_holds_the_portfolio_and_risk_tools() -> None:
+def test_the_wall_holds_every_local_tool() -> None:
     assert [tool.name for tool in RESEARCH_TOOLS] == [
         "get_positions",
         "sector_exposure",
         "stress_test",
+        "run_python",
     ]
 
 

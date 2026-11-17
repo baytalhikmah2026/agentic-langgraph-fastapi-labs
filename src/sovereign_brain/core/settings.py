@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # Internal market-data API (Lab 46): only the market MCP server talks to it
     market_api_url: str = "http://localhost:8100"
     market_api_token: SecretStr = SecretStr("local-market-token-change-me")
+    # Code sandbox (Lab 47): where the run_python tool sends checked code
+    sandbox_url: str = "http://localhost:8200"
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"
