@@ -4,10 +4,12 @@ The bearer token is added here, by code. The model never sees it and cannot chan
 Every answer from the API is checked with a strict Pydantic model before the agent may read
 it: unknown fields, a price of 0, a currency other than US dollars or a malformed ticker are
 refused. That protects the agent from poisoned or broken data.
+Lab 48: get_quotes asks for several prices at the same time (asyncio.gather).
 
 Run it on its own with: uv run python -m sovereign_brain.mcp_servers.market
 """
 
+import asyncio
 import os
 from datetime import date
 from typing import Annotated, Literal
@@ -18,6 +20,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 API_URL = os.environ.get("SB_MARKET_API_URL", "http://localhost:8100")
 API_TOKEN = os.environ.get("SB_MARKET_API_TOKEN", "")
+
+Ticker = Annotated[
+    str, Field(pattern=r"^[A-Za-z0-9]{1,6}$", description="A ticker, for example GLFP")
+]
 
 
 class MarketQuote(BaseModel):
@@ -32,6 +38,20 @@ class MarketQuote(BaseModel):
     as_of: date
 
 
+async def fetch_quote(client: httpx.AsyncClient, ticker: str) -> MarketQuote:
+    """One price from the API, checked against MarketQuote."""
+    response = await client.get(f"/v1/quotes/{ticker.upper()}")
+    if response.status_code == httpx.codes.NOT_FOUND:
+        raise ValueError(f"No quote for {ticker.upper()}")
+    response.raise_for_status()  # 401 and other errors become a tool error
+    try:
+        return MarketQuote.model_validate(response.json())
+    except ValidationError as error:
+        # Name the bad fields only: the bad values themselves must not reach the model
+        fields = ", ".join(sorted({str(e["loc"][0]) for e in error.errors() if e["loc"]}))
+        raise ValueError(f"The market API sent an invalid quote ({fields}); not used") from None
+
+
 def create_server(
     api_url: str, token: str, transport: httpx.AsyncBaseTransport | None = None
 ) -> FastMCP:
@@ -41,29 +61,29 @@ def create_server(
         instructions="Latest internal prices of the stocks and bonds that the bank's clients hold.",
     )
 
-    @server.tool()
-    async def get_quote(
-        ticker: Annotated[
-            str, Field(pattern=r"^[A-Za-z0-9]{1,6}$", description="A ticker, for example GLFP")
-        ],
-    ) -> MarketQuote:
-        """The latest internal price of one stock or bond, in US dollars."""
-        async with httpx.AsyncClient(
+    def api_client() -> httpx.AsyncClient:
+        return httpx.AsyncClient(
             base_url=api_url,
             headers={"Authorization": f"Bearer {token}"},
             timeout=5.0,
             transport=transport,
-        ) as client:
-            response = await client.get(f"/v1/quotes/{ticker.upper()}")
-        if response.status_code == httpx.codes.NOT_FOUND:
-            raise ValueError(f"No quote for {ticker.upper()}")
-        response.raise_for_status()  # 401 and other errors become a tool error
-        try:
-            return MarketQuote.model_validate(response.json())
-        except ValidationError as error:
-            # Name the bad fields only: the bad values themselves must not reach the model
-            fields = ", ".join(sorted({str(e["loc"][0]) for e in error.errors() if e["loc"]}))
-            raise ValueError(f"The market API sent an invalid quote ({fields}); not used") from None
+        )
+
+    @server.tool()
+    async def get_quote(ticker: Ticker) -> MarketQuote:
+        """The latest internal price of one stock or bond, in US dollars."""
+        async with api_client() as client:
+            return await fetch_quote(client, ticker)
+
+    @server.tool()
+    async def get_quotes(
+        tickers: Annotated[list[Ticker], Field(min_length=1, max_length=10)],
+    ) -> list[MarketQuote]:
+        """The latest internal prices of several stocks or bonds at once, in US dollars."""
+        wanted = list(dict.fromkeys(t.upper() for t in tickers))  # each ticker once, in order
+        async with api_client() as client:
+            # All requests are sent together; the slowest one sets the total time
+            return list(await asyncio.gather(*(fetch_quote(client, t) for t in wanted)))
 
     return server
 

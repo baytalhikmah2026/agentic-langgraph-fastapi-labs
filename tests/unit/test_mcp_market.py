@@ -1,4 +1,4 @@
-"""The market-data MCP server (Lab 46): token added by code, every answer checked."""
+"""The market-data MCP server (Labs 46, 48): token added by code, every answer checked."""
 
 import httpx
 from mcp.shared.memory import create_connected_server_and_client_session
@@ -66,3 +66,23 @@ def test_only_the_market_server_receives_the_token() -> None:
     }
     assert server_environment("desk", settings) is None
     assert server_environment("notes", settings) is None
+
+
+async def test_several_quotes_arrive_together() -> None:
+    server = create_server(API, token(), transport=httpx.ASGITransport(app=market_app))
+
+    async with create_connected_server_and_client_session(server) as session:
+        result = await session.call_tool("get_quotes", {"tickers": ["glfp", "SNRS", "GLFP"]})
+
+    quotes = result.structuredContent["result"]
+    assert [(q["ticker"], q["price"]) for q in quotes] == [("GLFP", 62.4), ("SNRS", 18.75)]
+
+
+async def test_one_unknown_ticker_fails_the_whole_batch() -> None:
+    server = create_server(API, token(), transport=httpx.ASGITransport(app=market_app))
+
+    async with create_connected_server_and_client_session(server) as session:
+        result = await session.call_tool("get_quotes", {"tickers": ["GLFP", "ZZZZ"]})
+
+    assert result.isError is True
+    assert "No quote for ZZZZ" in result.content[0].text
