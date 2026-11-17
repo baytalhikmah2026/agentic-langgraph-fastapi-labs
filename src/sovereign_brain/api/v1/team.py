@@ -31,6 +31,14 @@ def get_team_graph(request: Request) -> CompiledStateGraph:
 TeamGraph = Annotated[CompiledStateGraph, Depends(get_team_graph)]
 
 
+def get_network_graph(request: Request) -> CompiledStateGraph:
+    """The network of peers built once at start-up (Lab 53)."""
+    return request.app.state.network_graph
+
+
+NetworkGraph = Annotated[CompiledStateGraph, Depends(get_network_graph)]
+
+
 def team_config() -> dict:
     return {
         "recursion_limit": get_settings().graph_recursion_limit,
@@ -83,4 +91,28 @@ async def stream_team(
         yield ServerSentEvent(event="error", data={"error": "model_unavailable"})
         return
     yield ServerSentEvent(event="answer", data={"summary": final.get("answer", "")})
+    yield ServerSentEvent(event="done", data={"client_id": checked.body.client_id})
+
+
+@router.post(
+    "/network", response_class=EventSourceResponse, dependencies=[Depends(model_call_gate)]
+)
+async def stream_network(
+    checked: Checked, graph: NetworkGraph, context: RunContext
+) -> AsyncIterator[ServerSentEvent]:
+    """Peers handing work to each other, streamed as they negotiate (Lab 53)."""
+    try:
+        async for update in graph.astream(
+            checked.graph_input, config=team_config(), context=context, stream_mode="updates"
+        ):
+            for peer, change in update.items():
+                if change and "next" in change:  # a peer finished its part and handed over
+                    handoff = {"from": peer, "to": change["next"], "reason": change["task"]}
+                    yield ServerSentEvent(event="handoff", data=handoff)
+                if change and "answer" in change:
+                    yield ServerSentEvent(event="answer", data={"summary": change["answer"]})
+    except MODEL_ERRORS as error:
+        logger.error("AI model not available during the network stream: %r", error)
+        yield ServerSentEvent(event="error", data={"error": "model_unavailable"})
+        return
     yield ServerSentEvent(event="done", data={"client_id": checked.body.client_id})

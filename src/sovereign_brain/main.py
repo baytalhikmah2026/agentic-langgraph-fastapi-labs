@@ -34,6 +34,7 @@ from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
 from sovereign_brain.graphs.report import build_report_graph
 from sovereign_brain.graphs.research import build_research_graph
+from sovereign_brain.graphs.team.network import build_network_graph
 from sovereign_brain.graphs.team.supervisor import build_team_graph
 from sovereign_brain.llm.factory import get_chat_model, get_embeddings
 from sovereign_brain.memory.checkpoints import open_checkpointer
@@ -85,6 +86,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.report_graph = build_report_graph(model)
         # The team (Lab 51): a supervisor and its workers, with the same MCP tools
         app.state.team_graph = build_team_graph(model, extra_tools=app.state.mcp_tools)
+        # The network (Lab 53): peers that hand work to each other, no editor
+        app.state.network_graph = build_network_graph(model, extra_tools=app.state.mcp_tools)
         # Thread expiry (Lab 34): a background task that runs as long as the API runs
         worker = asyncio.create_task(
             cleanup_worker(

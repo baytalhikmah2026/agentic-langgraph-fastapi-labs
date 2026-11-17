@@ -1,4 +1,4 @@
-"""The team endpoints (Labs 51, 52)."""
+"""The team endpoints (Labs 51-53)."""
 
 import json
 from collections.abc import Callable
@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 from langchain_core.tools import StructuredTool
 
-from sovereign_brain.api.v1.team import get_team_graph
+from sovereign_brain.api.v1.team import get_network_graph, get_team_graph
+from sovereign_brain.graphs.team.network import build_network_graph
 from sovereign_brain.graphs.team.supervisor import build_team_graph
 
 
@@ -82,3 +83,26 @@ def test_the_stream_shows_the_steps_inside_the_desk(
     events = read_events(response.text)
     assert ("node", {"path": ["research_desk"], "node": "summarise"}) in events
     assert ("answer", {"summary": "Gulf Petroleum is rated hold."}) in events
+
+
+def test_the_network_streams_every_handoff(
+    app: FastAPI, client: TestClient, auth_headers: dict[str, str], make_model: Callable
+) -> None:
+    handoff = {"to": "writer", "reason": "The notes answer the question."}
+    model = make_model(
+        [
+            AIMessage("Energy is 18.5% of the portfolio."),  # the analyst
+            AIMessage("", tool_calls=[{"name": "Handoff", "args": handoff, "id": "h1"}]),
+            AIMessage("Energy is a modest 18.5% of the portfolio."),  # the writer
+        ]
+    )
+    graph = build_network_graph(model)
+    app.dependency_overrides[get_network_graph] = lambda: graph
+    request = {"client_id": "C-1042", "question": "How large is the energy exposure?"}
+
+    response = client.post("/v1/team/network", json=request, headers=auth_headers)
+
+    events = read_events(response.text)
+    assert events[0] == ("handoff", {"from": "analyst", **handoff})
+    assert events[1] == ("answer", {"summary": "Energy is a modest 18.5% of the portfolio."})
+    assert events[-1] == ("done", {"client_id": "C-1042"})
