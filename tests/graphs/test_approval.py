@@ -1,4 +1,4 @@
-"""Human approval (Module 7): the report graph stops before deliver until a person releases it."""
+"""Human approval (Labs 61-62): pauses before deliver, and after a draft on request."""
 
 import json
 from collections.abc import Callable
@@ -77,3 +77,20 @@ async def test_released_the_report_is_delivered(make_model: Callable, tmp_path: 
     assert letter["report"] == GOOD
     assert result["delivered"].endswith(f"{APPROVAL_ID}.json")
     assert stations((await graph.aget_state(CONFIG)).values["trail"])[-1] == "deliver"
+
+
+async def test_an_inspection_pause_comes_right_after_the_draft(
+    make_model: Callable, tmp_path: Path
+) -> None:
+    graph = build_report_graph(
+        make_model([as_report(GOOD, "r1")]), checkpointer=InMemorySaver(), outbox=tmp_path
+    )
+
+    await graph.ainvoke(REQUEST, config=CONFIG, context=CONTEXT, interrupt_after=["draft"])
+    after_draft = await graph.aget_state(CONFIG)
+    await graph.ainvoke(None, config=CONFIG, context=CONTEXT)  # carry on to the next hold line
+    before_deliver = await graph.aget_state(CONFIG)
+
+    assert after_draft.next == ("check",)  # the draft is written, not yet checked
+    assert after_draft.values["report"] == GOOD
+    assert before_deliver.next == ("deliver",)  # the run-time pause applied only once

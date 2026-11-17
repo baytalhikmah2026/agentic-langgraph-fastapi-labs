@@ -1,10 +1,10 @@
 """Reports that wait for a person (Module 7): the control tower of the Research Desk."""
 
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import StateSnapshot
 
@@ -22,6 +22,8 @@ router = APIRouter(
 logger = logging.getLogger("sovereign_brain.approvals")
 ApprovalId = Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")]
 ClientId = Annotated[str, Path(pattern=r"^[Cc]-\d{4}$")]
+# Lab 62: optional extra pause right after a station, chosen per request
+Inspect = Annotated[Literal["draft"] | None, Query(description="Pause after this station")]
 
 
 def get_approval_graph(request: Request) -> CompiledStateGraph:
@@ -71,9 +73,17 @@ async def saved_status(approval_id: str, graph: CompiledStateGraph) -> ApprovalS
 
 @router.post("/reports/{client_id}", dependencies=[Depends(model_call_gate)])
 async def request_report(
-    client_id: ClientId, clients: Clients, graph: ApprovalGraph, context: RunContext
+    client_id: ClientId,
+    clients: Clients,
+    graph: ApprovalGraph,
+    context: RunContext,
+    inspect: Inspect = None,
 ) -> ApprovalStatus:
-    """Write a report and stop before it is sent: a person must release it."""
+    """Write a report and stop before it is sent: a person must release it.
+
+    Lab 62: with ?inspect=draft the run also stops right after the first draft, so a person can
+    look at what the model wrote before the guardrail checks it.
+    """
     client = await clients.get(client_id.upper())
     if client is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Client {client_id} not found")
@@ -83,6 +93,7 @@ async def request_report(
         {"client_id": client.id, "client_profile": profile},
         config=approval_config(approval_id),
         context=context,
+        interrupt_after=[inspect] if inspect else None,  # only for this run (Lab 62)
     )
     logger.info("Report for %s waits for approval %s", client.id, approval_id)
     return await saved_status(approval_id, graph)
@@ -91,4 +102,17 @@ async def request_report(
 @router.get("/{approval_id}")
 async def get_approval(approval_id: ApprovalId, graph: ApprovalGraph) -> ApprovalStatus:
     """Where one approval stands, read from the checkpointer (it survives restarts)."""
+    return await saved_status(approval_id, graph)
+
+
+@router.post("/{approval_id}/continue", dependencies=[Depends(model_call_gate)])
+async def continue_run(
+    approval_id: ApprovalId, graph: ApprovalGraph, context: RunContext
+) -> ApprovalStatus:
+    """Let a run that paused for inspection carry on to its next hold line (Lab 62)."""
+    current = await saved_status(approval_id, graph)
+    if current.status != "paused":
+        detail = f"Approval {approval_id} is {current.status}; only a paused run can continue"
+        raise HTTPException(status.HTTP_409_CONFLICT, detail)
+    await graph.ainvoke(None, config=approval_config(approval_id), context=context)
     return await saved_status(approval_id, graph)

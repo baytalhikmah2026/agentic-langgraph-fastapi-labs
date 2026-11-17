@@ -62,3 +62,22 @@ def test_an_unknown_approval_is_not_found(
     response = client.get(f"/v1/approvals/{'0' * 32}", headers=auth_headers)
 
     assert response.status_code == 404
+
+
+def test_an_inspected_draft_continues_to_the_approval_line(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+
+    started = client.post("/v1/approvals/reports/C-1042?inspect=draft", headers=auth_headers)
+    approval_id = started.json()["approval_id"]
+    continued = client.post(f"/v1/approvals/{approval_id}/continue", headers=auth_headers)
+    again = client.post(f"/v1/approvals/{approval_id}/continue", headers=auth_headers)
+
+    assert (started.json()["status"], started.json()["next"]) == ("paused", ["check"])
+    assert continued.json()["status"] == "awaiting_approval"
+    assert again.status_code == 409  # waiting for approval is not an inspection pause
