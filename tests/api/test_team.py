@@ -105,4 +105,5 @@ def test_the_network_streams_every_handoff(
     events = read_events(response.text)
     assert events[0] == ("handoff", {"from": "analyst", **handoff})
     assert events[1] == ("answer", {"summary": "Energy is a modest 18.5% of the portfolio."})
-    assert events[-1] == ("done", {"client_id": "C-1042"})
+    assert events[-1][0] == "done"
+    assert events[-1][1]["client_id"] == "C-1042"

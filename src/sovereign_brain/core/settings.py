@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Thread expiry (Lab 34): unused threads are removed after this time (default 7 days)
     thread_ttl_minutes: int = 10080
     cleanup_interval_minutes: int = 60
+    # Shared state between graphs (Lab 54): team cases in Redis, kept one day by default
+    shared_state_store: Literal["memory", "redis"] = "memory"
+    case_ttl_minutes: int = 1440
     # Semantic memory (Lab 38): answers stored by meaning in Qdrant, across all threads
     semantic_memory: bool = True
     qdrant_url: str = "http://localhost:6333"

@@ -15,6 +15,7 @@ from sovereign_brain import __version__
 from sovereign_brain.api.v1 import (
     assistant,
     auth,
+    cases,
     clients,
     graphs,
     health,
@@ -34,12 +35,14 @@ from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
 from sovereign_brain.graphs.report import build_report_graph
 from sovereign_brain.graphs.research import build_research_graph
+from sovereign_brain.graphs.team.briefing import build_briefing_graph
 from sovereign_brain.graphs.team.network import build_network_graph
 from sovereign_brain.graphs.team.supervisor import build_team_graph
 from sovereign_brain.llm.factory import get_chat_model, get_embeddings
 from sovereign_brain.memory.checkpoints import open_checkpointer
 from sovereign_brain.memory.retention import ThreadRegistry, cleanup_worker
 from sovereign_brain.memory.semantic import SemanticMemory
+from sovereign_brain.memory.shared_state import open_shared_store
 from sovereign_brain.memory.summaries import ThreadArchivist
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.mcp_host import load_mcp_tools
@@ -77,7 +80,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # MCP servers (Lab 44): their tools are discovered once and join the tool wall
     app.state.mcp_tools = await load_mcp_tools(settings)
     # Thread memory (Lab 32): the checkpointer stays open while the API runs
-    async with open_checkpointer(settings) as checkpointer:
+    async with (
+        open_checkpointer(settings) as checkpointer,
+        open_shared_store(settings) as shared_store,
+    ):
         app.state.research_graph = build_research_graph(
             model, checkpointer=checkpointer, extra_tools=app.state.mcp_tools
         )
@@ -86,8 +92,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.report_graph = build_report_graph(model)
         # The team (Lab 51): a supervisor and its workers, with the same MCP tools
         app.state.team_graph = build_team_graph(model, extra_tools=app.state.mcp_tools)
-        # The network (Lab 53): peers that hand work to each other, no editor
-        app.state.network_graph = build_network_graph(model, extra_tools=app.state.mcp_tools)
+        # The network (Lab 53): peers that hand work to each other, no editor;
+        # every run is saved as a case in the shared store (Lab 54)
+        app.state.network_graph = build_network_graph(
+            model, extra_tools=app.state.mcp_tools, checkpointer=shared_store
+        )
+        # A second graph that picks up saved cases through the bridge (Lab 54)
+        app.state.briefing_graph = build_briefing_graph(model, checkpointer=shared_store)
         # Thread expiry (Lab 34): a background task that runs as long as the API runs
         worker = asyncio.create_task(
             cleanup_worker(
@@ -125,6 +136,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router)
     app.include_router(assistant.router)
     app.include_router(team.router)
+    app.include_router(cases.router)
     return app
 
 

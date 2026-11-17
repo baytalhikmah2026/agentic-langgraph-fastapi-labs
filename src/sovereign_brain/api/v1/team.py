@@ -4,6 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.sse import EventSourceResponse, ServerSentEvent
@@ -15,6 +16,7 @@ from sovereign_brain.core.rate_limit import model_call_gate
 from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.security import get_current_user
 from sovereign_brain.core.settings import get_settings
+from sovereign_brain.memory.shared_state import case_thread
 from sovereign_brain.schemas.team import TeamResponse
 
 router = APIRouter(prefix="/v1/team", tags=["team"], dependencies=[Depends(get_current_user)])
@@ -100,10 +102,16 @@ async def stream_team(
 async def stream_network(
     checked: Checked, graph: NetworkGraph, context: RunContext
 ) -> AsyncIterator[ServerSentEvent]:
-    """Peers handing work to each other, streamed as they negotiate (Lab 53)."""
+    """Peers handing work to each other, streamed as they negotiate (Lab 53).
+
+    Lab 54: every run is saved as a case under the network's namespace in the shared store.
+    """
+    case_id = uuid4().hex
+    thread = case_thread("network", context.analyst, case_id)
+    config = {**team_config(), "configurable": {"thread_id": thread}}
     try:
         async for update in graph.astream(
-            checked.graph_input, config=team_config(), context=context, stream_mode="updates"
+            checked.graph_input, config=config, context=context, stream_mode="updates"
         ):
             for peer, change in update.items():
                 if change and "next" in change:  # a peer finished its part and handed over
@@ -115,4 +123,5 @@ async def stream_network(
         logger.error("AI model not available during the network stream: %r", error)
         yield ServerSentEvent(event="error", data={"error": "model_unavailable"})
         return
-    yield ServerSentEvent(event="done", data={"client_id": checked.body.client_id})
+    done = {"client_id": checked.body.client_id, "case_id": case_id}
+    yield ServerSentEvent(event="done", data=done)

@@ -21,3 +21,12 @@ class TeamResponse(BaseModel):
     notes: list[TeamNote]
     trail: list[TrailStep]
     created_at: datetime
+
+
+class BriefingResponse(BaseModel):
+    """The relationship manager's briefing, written by a second graph from a case (Lab 54)."""
+
+    case_id: str
+    client_id: str
+    briefing: str
+    created_at: datetime

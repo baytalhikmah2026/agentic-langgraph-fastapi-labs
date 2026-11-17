@@ -14,6 +14,7 @@ from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
@@ -104,9 +105,14 @@ def peer_node(
 
 
 def build_network_graph(
-    model: BaseChatModel, extra_tools: Sequence[BaseTool] = ()
+    model: BaseChatModel,
+    extra_tools: Sequence[BaseTool] = (),
+    checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph:
-    """Built once at start-up; each run brings its own ResearchContext (Lab 28)."""
+    """Built once at start-up; each run brings its own ResearchContext (Lab 28).
+
+    Lab 54: with a checkpointer, every run is saved as a case in the shared store.
+    """
     decider = model.with_structured_output(Handoff)
     tools = {
         "analyst": [*PORTFOLIO_TOOLS, *extra_tools],
@@ -134,4 +140,4 @@ def build_network_graph(
         builder.add_node(name, peer_node(name, agent, decider), destinations=PEERS)
     builder.add_node("writer", writer, destinations=(END,))
     builder.add_edge(START, "analyst")  # the analyst opens; after that, the peers decide
-    return builder.compile(name="network")
+    return builder.compile(checkpointer=checkpointer, name="network")
