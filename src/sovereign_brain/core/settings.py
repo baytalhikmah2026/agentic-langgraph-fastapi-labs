@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     map_chunk_chars: int = 1200
     map_collapse_chars: int = 2000
     map_max_concurrency: int = 4
+    # Approvals (Lab 61): released reports are sent here, one JSON file each
+    outbox_dir: str = "data/outbox"
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

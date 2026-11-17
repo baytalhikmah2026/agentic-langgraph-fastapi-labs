@@ -8,15 +8,23 @@ systems read them. This small graph forces both:
    with its problems listed, at most max_revisions times.
 4. fallback: if it is still wrong (or there is nothing to report), the desk writes a plain
    report from the facts itself. Callers always receive a valid ResearchReport.
+Lab 61: with an outbox, a fifth station, deliver, sends the finished report to the client.
+The graph stops just before it (interrupt_before) and waits, saved by the checkpointer, until
+a person releases it.
 """
 
 import json
 import logging
 import operator
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Literal, TypedDict
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
@@ -55,7 +63,14 @@ class ReportState(ReportInput):
     attempts: int
     checked: bool
     verdict: Literal["done", "retry", "fallback"]
+    delivered: str  # where the approved report was sent (Lab 61)
     trail: Annotated[list[TrailEntry], operator.add]
+
+
+class ApprovalOutput(ReportOutput):
+    """What an approval run returns: the report, and where it went once released (Lab 61)."""
+
+    delivered: str
 
 
 def sector_facts(portfolio: dict) -> dict:
@@ -188,8 +203,33 @@ def fallback(state: ReportState) -> dict:
     return {"report": report.model_dump(), "checked": False, "trail": mark("fallback", note)}
 
 
-def build_report_graph(model: BaseChatModel) -> CompiledStateGraph:
-    """Built once at start-up; each run brings its own ResearchContext (Lab 28)."""
+def deliver_to(outbox: Path) -> Callable[..., Awaitable[dict]]:
+    """The deliver station for one outbox folder: one JSON file per released report."""
+
+    async def deliver(state: ReportState, config: RunnableConfig) -> dict:
+        approval_id = config["configurable"]["thread_id"].rpartition(":")[2]
+        outbox.mkdir(parents=True, exist_ok=True)
+        path = outbox / f"{approval_id}.json"
+        letter = {
+            "client_id": state["client_id"],
+            "report": state["report"],
+            "delivered_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        }
+        path.write_text(json.dumps(letter, indent=2), encoding="utf-8")
+        return {"delivered": path.as_posix(), "trail": mark("deliver", f"Sent to {path.name}")}
+
+    return deliver
+
+
+def build_report_graph(
+    model: BaseChatModel,
+    checkpointer: BaseCheckpointSaver | None = None,
+    outbox: Path | None = None,
+) -> CompiledStateGraph:
+    """Built once at start-up; each run brings its own ResearchContext (Lab 28).
+
+    Lab 61: with an outbox, finished reports go to deliver, and the graph pauses before it.
+    """
     structured = model.with_structured_output(ResearchReport)
 
     async def draft(state: ReportState) -> dict:
@@ -219,7 +259,7 @@ def build_report_graph(model: BaseChatModel) -> CompiledStateGraph:
         ReportState,
         context_schema=ResearchContext,
         input_schema=ReportInput,
-        output_schema=ReportOutput,
+        output_schema=ReportOutput if outbox is None else ApprovalOutput,
     )
     builder.add_node("gather", gather)
     builder.add_node("draft", draft)
@@ -230,8 +270,17 @@ def build_report_graph(model: BaseChatModel) -> CompiledStateGraph:
         "gather", after_gather, {"draft": "draft", "fallback": "fallback"}
     )
     builder.add_edge("draft", "check")
+    finished = END if outbox is None else "deliver"  # where a finished report goes
     builder.add_conditional_edges(
-        "check", after_check, {"done": END, "retry": "draft", "fallback": "fallback"}
+        "check", after_check, {"done": finished, "retry": "draft", "fallback": "fallback"}
     )
-    builder.add_edge("fallback", END)
-    return builder.compile(name="report")
+    builder.add_edge("fallback", finished)
+    if outbox is None:
+        return builder.compile(checkpointer=checkpointer, name="report")
+    builder.add_node("deliver", deliver_to(outbox))
+    builder.add_edge("deliver", END)
+    return builder.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["deliver"],  # a person releases every report (Lab 61)
+        name="approval",
+    )

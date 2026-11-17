@@ -5,6 +5,7 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from qdrant_client import AsyncQdrantClient
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sovereign_brain import __version__
 from sovereign_brain.api.v1 import (
     agency,
+    approvals,
     assistant,
     auth,
     cases,
@@ -98,6 +100,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Research graph ready (model %s)", settings.llm_model)
         # Reports (Lab 49): a fixed protocol and a strict answer shape
         app.state.report_graph = build_report_graph(model)
+        # Approvals (Lab 61): the same protocol, saved, and paused before delivery
+        app.state.approval_graph = build_report_graph(
+            model, checkpointer=checkpointer, outbox=Path(settings.outbox_dir)
+        )
         # The team (Lab 51): a supervisor and its workers, with the same MCP tools
         app.state.team_graph = build_team_graph(model, extra_tools=app.state.mcp_tools)
         # The network (Lab 53): peers that hand work to each other, no editor;
@@ -157,6 +163,7 @@ def create_app() -> FastAPI:
     app.include_router(cases.router)
     app.include_router(documents.router)
     app.include_router(agency.router)
+    app.include_router(approvals.router)
     return app
 
 
