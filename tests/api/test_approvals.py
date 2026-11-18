@@ -333,3 +333,35 @@ def test_decisions_are_counted_for_prometheus(
     )
     assert page.status_code == 200
     assert 'sb_approval_actions_total{action="rejected"}' in page.text
+
+
+def test_the_history_tells_the_whole_story(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    omar_headers: dict[str, str],
+    layla_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    change = {"mode": "fallback", "reason": "Use the plain wording."}
+    client.post(f"/v1/approvals/{approval_id}/override", json=change, headers=layla_headers)
+    client.post(
+        f"/v1/approvals/{approval_id}/decision", json={"action": "approve"}, headers=omar_headers
+    )
+
+    record = client.get(f"/v1/approvals/{approval_id}/history", headers=auth_headers).json()
+
+    actors = [step["actor"] for step in record["steps"]]
+    assert record["approval"]["status"] == "delivered"
+    assert record["register"]["requested_by"] == "amina"
+    assert (record["register"]["status"], record["register"]["decided_by"]) == ("approved", "omar")
+    assert record["steps"][0]["source"] == "input"
+    assert "update" in [step["source"] for step in record["steps"]]  # the override
+    assert actors[0] == "amina" and actors[-1] == "omar"
+    assert "layla" in actors
+    assert record["steps"][-1]["next"] == []  # finished

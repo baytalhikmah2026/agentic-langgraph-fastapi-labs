@@ -60,3 +60,34 @@ class Override(BaseModel):
         if self.mode == "edit" and self.report is None:
             raise ValueError("an edit needs the edited report")
         return self
+
+
+class ApprovalRecord(BaseModel):
+    """The approvals register row of one report (Lab 70)."""
+
+    requested_by: str
+    requested_at: datetime
+    status: str
+    decided_by: str | None
+    decided_at: datetime | None
+    comment: str | None
+
+
+class HistoryStep(BaseModel):
+    """One saved step of an approval run: what happened, caused by whom, in which trace."""
+
+    step: int
+    source: str  # "input" (a request), "loop" (a station ran) or "update" (a person's action)
+    next: list[str]
+    actor: str | None  # the signed-in person behind this step
+    request_id: str | None
+    trace_id: str | None  # open it in Jaeger (Lab 66), when tracing is on
+    created_at: str
+
+
+class ApprovalHistory(BaseModel):
+    """The audit record of one report (Lab 70): where it stands, the register, every step."""
+
+    approval: ApprovalStatus
+    register: ApprovalRecord | None
+    steps: list[HistoryStep]

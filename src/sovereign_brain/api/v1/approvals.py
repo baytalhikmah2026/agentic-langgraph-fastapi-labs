@@ -18,11 +18,15 @@ from sovereign_brain.db.repository import Approvals, Clients
 from sovereign_brain.graphs.report import report_problems
 from sovereign_brain.graphs.trail import mark
 from sovereign_brain.observability.metrics import APPROVAL_ACTIONS
+from sovereign_brain.observability.tracing import current_trace_id
 from sovereign_brain.schemas.approvals import (
+    ApprovalHistory,
+    ApprovalRecord,
     ApprovalStatus,
     ApprovalSummary,
     Decision,
     Feedback,
+    HistoryStep,
     Override,
 )
 
@@ -44,17 +48,24 @@ def get_approval_graph(request: Request) -> CompiledStateGraph:
 ApprovalGraph = Annotated[CompiledStateGraph, Depends(get_approval_graph)]
 
 
-def approval_config(approval_id: str) -> dict:
+def approval_config(approval_id: str, actor: str | None = None) -> dict:
     """Every approval is its own thread in the checkpointer: "approval:<id>".
 
     Lab 67: the tag and the approval_id label each run, so trace viewers (LangSmith, Jaeger)
     can filter all the runs of one approval.
+    Lab 70: who acted, and the trace ID, are saved with every checkpoint of the run.
     """
+    metadata = {"request_id": get_request_id(), "approval_id": approval_id}
+    if actor is not None:
+        metadata["actor"] = actor
+    trace_id = current_trace_id()
+    if trace_id is not None:
+        metadata["trace_id"] = trace_id
     return {
         "configurable": {"thread_id": f"approval:{approval_id}"},
         "recursion_limit": get_settings().graph_recursion_limit,
         "tags": ["approvals"],
-        "metadata": {"request_id": get_request_id(), "approval_id": approval_id},
+        "metadata": metadata,
     }
 
 
@@ -113,7 +124,7 @@ async def request_report(
     approval_id = uuid4().hex
     await graph.ainvoke(
         {"client_id": client.id, "client_profile": profile},
-        config=approval_config(approval_id),
+        config=approval_config(approval_id, actor=user.username),
         context=context,
         interrupt_after=[inspect] if inspect else None,  # only for this run (Lab 62)
     )
@@ -144,14 +155,15 @@ async def get_approval(approval_id: ApprovalId, graph: ApprovalGraph) -> Approva
 
 @router.post("/{approval_id}/continue", dependencies=[Depends(model_call_gate)])
 async def continue_run(
-    approval_id: ApprovalId, graph: ApprovalGraph, context: RunContext
+    approval_id: ApprovalId, user: CurrentUser, graph: ApprovalGraph, context: RunContext
 ) -> ApprovalStatus:
     """Let a run that paused for inspection carry on to its next hold line (Lab 62)."""
     current = await saved_status(approval_id, graph)
     if current.status != "paused":
         detail = f"Approval {approval_id} is {current.status}; only a paused run can continue"
         raise HTTPException(status.HTTP_409_CONFLICT, detail)
-    await graph.ainvoke(None, config=approval_config(approval_id), context=context)
+    config = approval_config(approval_id, actor=user.username)
+    await graph.ainvoke(None, config=config, context=context)
     return await saved_status(approval_id, graph)
 
 
@@ -186,7 +198,7 @@ async def decide(
 ) -> ApprovalStatus:
     """Approve (the report is delivered) or reject (it is never sent), by a second person."""
     record = await waiting_record(approval_id, user, approvals, graph)
-    config = approval_config(approval_id)
+    config = approval_config(approval_id, actor=user.username)
     if decision.action == "approve":
         await graph.ainvoke(None, config=config, context=context)  # runs deliver
     else:
@@ -211,7 +223,7 @@ async def send_back(
 ) -> ApprovalStatus:
     """Send a waiting report back with a reviewer's note; a new draft returns for approval."""
     await waiting_record(approval_id, user, approvals, graph)
-    config = approval_config(approval_id)
+    config = approval_config(approval_id, actor=user.username)
     note = f"{user.username}: {feedback.comment}"
     trail = mark("check", f"Sent back by {note}")
     update = {"feedback": [note], "verdict": "retry", "trail": trail}
@@ -236,7 +248,7 @@ async def override(
     if user.role != "lead":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a desk lead can override a report")
     await waiting_record(approval_id, user, approvals, graph)
-    config = approval_config(approval_id)
+    config = approval_config(approval_id, actor=user.username)
     note = f"Overridden by {user.username} ({change.mode}): {change.reason}"
     update = {"overridden_by": user.username, "trail": mark("check", note)}
     if change.mode == "edit":
@@ -254,3 +266,36 @@ async def override(
     APPROVAL_ACTIONS.labels(f"override_{change.mode}").inc()  # Lab 68
     logger.info("Approval %s overridden by %s (%s)", approval_id, user.username, change.mode)
     return await saved_status(approval_id, graph)
+
+
+@router.get("/{approval_id}/history")
+async def history(
+    approval_id: ApprovalId, approvals: Approvals, graph: ApprovalGraph
+) -> ApprovalHistory:
+    """The audit record of one report (Lab 70): who asked, every step, who decided."""
+    current = await saved_status(approval_id, graph)  # 404 for an unknown approval
+    record = await approvals.get(approval_id)
+    steps = [
+        HistoryStep(
+            step=snapshot.metadata.get("step", 0),
+            source=snapshot.metadata.get("source", "unknown"),
+            next=list(snapshot.next),
+            actor=snapshot.metadata.get("actor"),
+            request_id=snapshot.metadata.get("request_id"),
+            trace_id=snapshot.metadata.get("trace_id"),
+            created_at=snapshot.created_at or "",
+        )
+        async for snapshot in graph.aget_state_history(approval_config(approval_id))
+    ]
+    steps.reverse()  # the checkpointer lists the newest first; an audit reads oldest first
+    register = None
+    if record is not None:
+        register = ApprovalRecord(
+            requested_by=record.requested_by,
+            requested_at=record.requested_at,
+            status=record.status,
+            decided_by=record.decided_by,
+            decided_at=record.decided_at,
+            comment=record.comment,
+        )
+    return ApprovalHistory(approval=current, register=register, steps=steps)

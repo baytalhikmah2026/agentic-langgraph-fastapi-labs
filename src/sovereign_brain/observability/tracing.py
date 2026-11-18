@@ -134,3 +134,9 @@ def setup_tracing(app: FastAPI, settings: Settings) -> TracerProvider | None:
     register_configure_hook(ContextVar("sb_graph_tracer", default=tracer), inheritable=True)
     logger.info("Tracing on: spans go to %s", settings.otel_endpoint)
     return provider
+
+
+def current_trace_id() -> str | None:
+    """The current request's trace ID, as Jaeger shows it (Lab 70); None when tracing is off."""
+    context = trace.get_current_span().get_span_context()
+    return format(context.trace_id, "032x") if context.is_valid else None
