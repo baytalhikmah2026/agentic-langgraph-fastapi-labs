@@ -19,7 +19,10 @@ services:
       SB_CHECKPOINT_STORE: postgres
       SB_SHARED_STATE_STORE: redis
       SB_QDRANT_URL: http://qdrant:6333
-      SB_MARKET_API_URL: http://market:8100
+      SB_MARKET_API_URL: https://market:8100
+      SB_MARKET_CA_FILE: /certs/ca.crt
+      SB_MARKET_CLIENT_CERT: /certs/api-client.crt
+      SB_MARKET_CLIENT_KEY: /certs/api-client.key
       SB_SANDBOX_URL: http://sandbox:8200
       SB_OTEL_ENABLED: "true"
       SB_OTEL_ENDPOINT: http://otel-collector:4318
@@ -41,6 +44,8 @@ services:
     networks:
       - default
       - sandbox-net
+    volumes:
+      - ./ops/certs:/certs:ro  # mutual TLS to the market API (Lab 74)
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
@@ -61,14 +66,25 @@ services:
     build: .
     image: sovereign-brain-api:dev
     container_name: sb-market
-    command: ["fastapi", "run", "src/sovereign_brain/market/app.py", "--host", "0.0.0.0", "--port", "8100"]
+    # Lab 74: HTTPS with mutual TLS; callers need a certificate signed by our CA
+    command:
+      - uvicorn
+      - sovereign_brain.market.app:app
+      - --host=0.0.0.0
+      - --port=8100
+      - --ssl-certfile=/certs/market.crt
+      - --ssl-keyfile=/certs/market.key
+      - --ssl-ca-certs=/certs/ca.crt
+      - --ssl-cert-reqs=2
     ports:
       - "8100:8100"
     env_file:
       - path: .env
         required: false
+    volumes:
+      - ./ops/certs:/certs:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health')"]
+      test: ["CMD", "python", "-m", "sovereign_brain.market.health"]
       interval: 10s
       timeout: 3s
       retries: 5

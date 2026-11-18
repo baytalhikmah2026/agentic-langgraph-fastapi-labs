@@ -29,3 +29,6 @@ data/outbox/
 # Files written by the software agency (Lab 60)
 data/workspace/*
 !data/workspace/README.md
+
+# Lab certificates and their private keys (Lab 74): made on each computer, never committed
+ops/certs/

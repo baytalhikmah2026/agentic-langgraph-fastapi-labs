@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # Internal market-data API (Lab 46): only the market MCP server talks to it
     market_api_url: str = "http://localhost:8100"
     market_api_token: SecretStr = SecretStr("local-market-token-change-me")
+    # Mutual TLS to the market API (Lab 74): empty means plain HTTP (tests, local runs)
+    market_ca_file: str = ""
+    market_client_cert: str = ""
+    market_client_key: str = ""
     # Code sandbox (Lab 47): where the run_python tool sends checked code
     sandbox_url: str = "http://localhost:8200"
     # Long documents (Lab 57): where they live, piece size, collapse size, readers at once

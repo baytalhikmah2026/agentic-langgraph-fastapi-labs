@@ -5,12 +5,14 @@ Every answer from the API is checked with a strict Pydantic model before the age
 it: unknown fields, a price of 0, a currency other than US dollars or a malformed ticker are
 refused. That protects the agent from poisoned or broken data.
 Lab 48: get_quotes asks for several prices at the same time (asyncio.gather).
+Lab 74: with SB_MARKET_CA_FILE set, the server talks to the API over mutual TLS.
 
 Run it on its own with: uv run python -m sovereign_brain.mcp_servers.market
 """
 
 import asyncio
 import os
+import ssl
 from datetime import date
 from typing import Annotated, Literal
 
@@ -18,8 +20,11 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from sovereign_brain.security.certs import client_context
+
 API_URL = os.environ.get("SB_MARKET_API_URL", "http://localhost:8100")
 API_TOKEN = os.environ.get("SB_MARKET_API_TOKEN", "")
+CA_FILE = os.environ.get("SB_MARKET_CA_FILE", "")
 
 Ticker = Annotated[
     str, Field(pattern=r"^[A-Za-z0-9]{1,6}$", description="A ticker, for example GLFP")
@@ -53,7 +58,10 @@ async def fetch_quote(client: httpx.AsyncClient, ticker: str) -> MarketQuote:
 
 
 def create_server(
-    api_url: str, token: str, transport: httpx.AsyncBaseTransport | None = None
+    api_url: str,
+    token: str,
+    transport: httpx.AsyncBaseTransport | None = None,
+    tls: ssl.SSLContext | None = None,
 ) -> FastMCP:
     """A market-data server for one API (tests pass a transport that reaches a test API)."""
     server = FastMCP(
@@ -67,6 +75,7 @@ def create_server(
             headers={"Authorization": f"Bearer {token}"},
             timeout=5.0,
             transport=transport,
+            verify=tls if tls is not None else True,  # our CA and our certificate (Lab 74)
         )
 
     @server.tool()
@@ -88,7 +97,12 @@ def create_server(
     return server
 
 
-server = create_server(API_URL, API_TOKEN)
+tls = None
+if CA_FILE:
+    tls = client_context(
+        CA_FILE, os.environ["SB_MARKET_CLIENT_CERT"], os.environ["SB_MARKET_CLIENT_KEY"]
+    )
+server = create_server(API_URL, API_TOKEN, tls=tls)
 
 if __name__ == "__main__":
     server.run()

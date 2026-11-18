@@ -4,6 +4,7 @@ Each server is a separate process that speaks the Model Context Protocol over st
 adapter library (langchain-mcp-adapters) discovers their tools at start-up, so the agent's tool
 wall grows without changing the graph. Every MCP call is written to the audit log.
 Lab 46: a server can get its own environment variables; only "market" gets the API token.
+Lab 74: "market" also gets the files for mutual TLS, when they are configured.
 Lab 71: every tool result is checked by the injection guard before the model reads it.
 """
 
@@ -37,10 +38,15 @@ MCP_SERVERS = {
 def server_environment(name: str, settings: Settings) -> dict[str, str] | None:
     """Extra environment variables for one server (Lab 46): each gets only what it needs."""
     if name == "market":
-        return {
+        env = {
             "SB_MARKET_API_URL": settings.market_api_url,
             "SB_MARKET_API_TOKEN": settings.market_api_token.get_secret_value(),
         }
+        if settings.market_ca_file:  # mutual TLS (Lab 74)
+            env["SB_MARKET_CA_FILE"] = settings.market_ca_file
+            env["SB_MARKET_CLIENT_CERT"] = settings.market_client_cert
+            env["SB_MARKET_CLIENT_KEY"] = settings.market_client_key
+        return env
     return None
 
 

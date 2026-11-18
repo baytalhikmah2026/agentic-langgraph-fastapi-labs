@@ -5,6 +5,7 @@ description = "The AI Research Desk of Crescent Ledger Bank: agents with LangGra
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "cryptography==50.0.2",
     "en-core-web-sm",
     "fastapi[standard]==0.162.4",
     "langchain==1.4.10",
