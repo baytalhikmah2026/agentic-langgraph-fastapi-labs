@@ -27,6 +27,7 @@ from sovereign_brain.api.v1 import (
     memory,
     ops,
     privacy,
+    security,
     reports,
     research,
     team,
@@ -38,6 +39,7 @@ from sovereign_brain.core.errors import register_exception_handlers
 from sovereign_brain.core.logging import configure_logging
 from sovereign_brain.core.rate_limit import limiter
 from sovereign_brain.core.request_id import RequestIdMiddleware
+from sovereign_brain.core.security_headers import SecurityHeadersMiddleware
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.session import create_engine
 from sovereign_brain.graphs.report import build_report_graph
@@ -159,6 +161,7 @@ def create_app() -> FastAPI:
     app.state.signer = Signer.from_pem(settings.approval_signing_key.get_secret_value())
     register_exception_handlers(app)
     app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)  # Lab 80
     app.state.tracer_provider = setup_tracing(app, settings)  # Lab 66, if switched on
     app.include_router(health.router)
     app.include_router(metrics.router)  # GET /metrics for Prometheus (Lab 68)
@@ -179,6 +182,7 @@ def create_app() -> FastAPI:
     app.include_router(ops.router)
     app.include_router(audit.router)
     app.include_router(privacy.router)
+    app.include_router(security.router)
     return app
 
 

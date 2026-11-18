@@ -21,3 +21,10 @@ class AuditCheck(BaseModel):
     problems: list[str]
     head_hash: str  # the newest entry's hash: it stands for the whole chain
     signature: str  # the desk's signature over events, valid and head_hash
+
+
+class SecurityReport(BaseModel):
+    """The desk's security posture at one moment, signed (Lab 80)."""
+
+    posture: dict
+    signature: str
