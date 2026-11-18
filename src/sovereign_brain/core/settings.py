@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     otel_enabled: bool = False
     otel_endpoint: str = "http://localhost:4318"
     otel_service_name: str = "sovereign-brain-api"
+    # Grafana alerts (Lab 69): the token Grafana sends to POST /v1/ops/alerts
+    alert_webhook_token: SecretStr = SecretStr("local-alert-token-change-me")
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

@@ -1,0 +1,9 @@
+# Grafana (Lab 69): load every dashboard file from /etc/grafana/dashboards
+apiVersion: 1
+
+providers:
+  - name: sovereign-brain
+    folder: Sovereign Brain
+    type: file
+    options:
+      path: /etc/grafana/dashboards

@@ -183,6 +183,23 @@ services:
     depends_on:
       - api
 
+  grafana:
+    # Dashboards and alerts (Lab 69): open http://localhost:3000 and sign in as admin
+    image: grafana/grafana:13.3.1
+    container_name: sb-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: $SB_GRAFANA_ADMIN_PASSWORD
+      SB_ALERT_WEBHOOK_TOKEN: $SB_ALERT_WEBHOOK_TOKEN
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
   vllm:
     # Optional, NVIDIA GPU only: docker compose --profile gpu up -d vllm
     image: vllm/vllm-openai:v0.33.0
@@ -213,3 +230,4 @@ volumes:
   qdrant-data:
   hf-cache:
   prometheus-data:
+  grafana-data:

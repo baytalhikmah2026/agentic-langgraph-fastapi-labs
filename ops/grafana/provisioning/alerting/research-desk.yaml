@@ -1,0 +1,58 @@
+# Grafana (Lab 69): one alert rule and where its notifications go
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: research-desk-webhook
+    receivers:
+      - uid: sb-webhook
+        type: webhook
+        settings:
+          url: http://api:8000/v1/ops/alerts
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: $SB_ALERT_WEBHOOK_TOKEN
+
+policies:
+  - orgId: 1
+    receiver: research-desk-webhook
+    group_by: ["alertname"]
+
+groups:
+  - orgId: 1
+    name: research-desk
+    folder: Sovereign Brain
+    interval: 1m
+    rules:
+      - uid: sb-runs-that-will-not-stop
+        title: Runs that will not stop
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: sb-prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                sum(rate(sb_station_duration_seconds_count{graph="approval"}[5m]))
+                / sum(rate(sb_graph_runs_total{graph="approval"}[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [12]
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Approval runs are going through more than 12 stations on average

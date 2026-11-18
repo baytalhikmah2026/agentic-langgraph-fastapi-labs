@@ -1,0 +1,245 @@
+{
+  "uid": "sb-research-desk",
+  "title": "Research Desk",
+  "tags": [
+    "sovereign-brain"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "input_price",
+        "label": "Input price (USD per 1M tokens)",
+        "type": "textbox",
+        "query": "0.15",
+        "current": {
+          "text": "0.15",
+          "value": "0.15"
+        }
+      },
+      {
+        "name": "output_price",
+        "label": "Output price (USD per 1M tokens)",
+        "type": "textbox",
+        "query": "0.60",
+        "current": {
+          "text": "0.60",
+          "value": "0.60"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Graph runs",
+      "description": "How many graph runs finished in the selected time range.",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sb-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sb-prometheus"
+          },
+          "expr": "sum(increase(sb_graph_runs_total[$__range]))",
+          "legendFormat": "runs"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Estimated cost per report",
+      "description": "Tokens of the time range times the prices above, divided by approval runs. Ollama is free; this shows what a paid model would cost.",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sb-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sb-prometheus"
+          },
+          "expr": "(sum(increase(sb_model_tokens_total{kind=\"input\"}[$__range])) * $input_price + sum(increase(sb_model_tokens_total{kind=\"output\"}[$__range])) * $output_price) / 1000000 / sum(increase(sb_graph_runs_total{graph=\"approval\"}[$__range]))",
+          "legendFormat": "USD"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Approval actions",
+      "description": "What people did with waiting reports.",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sb-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sb-prometheus"
+          },
+          "expr": "sum by (action) (increase(sb_approval_actions_total[$__range]))",
+          "legendFormat": "{{action}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Station time (95th percentile)",
+      "description": "95% of station runs finish within this time.",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sb-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sb-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, station) (rate(sb_station_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{station}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Model tokens per minute",
+      "description": "Input and output tokens per minute, all models.",
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sb-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sb-prometheus"
+          },
+          "expr": "sum by (kind) (rate(sb_model_tokens_total[5m])) * 60",
+          "legendFormat": "{{kind}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Stations per run",
+      "description": "Average stations per graph run. A rising line means runs loop more; the alert watches the approval line and fires above 12.",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sb-prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sb-prometheus"
+          },
+          "expr": "sum by (graph) (rate(sb_station_duration_seconds_count[5m])) / sum by (graph) (rate(sb_graph_runs_total[5m]))",
+          "legendFormat": "{{graph}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

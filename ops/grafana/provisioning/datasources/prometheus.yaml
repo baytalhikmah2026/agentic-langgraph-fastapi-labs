@@ -1,0 +1,10 @@
+# Grafana (Lab 69): Prometheus as the data source, created when Grafana starts
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: sb-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
