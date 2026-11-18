@@ -21,6 +21,7 @@ class ApprovalStatus(BaseModel):
     report: ResearchReport | None
     checked: bool | None
     delivered: str | None
+    feedback: list[str]  # reviewer notes the desk has received (Lab 64)
     trail: list[TrailStep]
 
 
@@ -38,3 +39,9 @@ class Decision(BaseModel):
 
     action: Literal["approve", "reject"]
     comment: str | None = Field(default=None, max_length=500)
+
+
+class Feedback(BaseModel):
+    """A reviewer's note for the desk: what to change in the next draft (Lab 64)."""
+
+    comment: str = Field(min_length=3, max_length=500)

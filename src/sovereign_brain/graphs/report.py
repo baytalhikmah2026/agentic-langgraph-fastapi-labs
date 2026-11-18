@@ -11,6 +11,8 @@ systems read them. This small graph forces both:
 Lab 61: with an outbox, a fifth station, deliver, sends the finished report to the client.
 The graph stops just before it (interrupt_before) and waits, saved by the checkpointer, until
 a person releases it.
+Lab 64: a reviewer can send a waiting report back with a note. The note is kept in the state
+(feedback) and every later draft reads it.
 """
 
 import json
@@ -64,6 +66,7 @@ class ReportState(ReportInput):
     checked: bool
     verdict: Literal["done", "retry", "fallback"]
     delivered: str  # where the approved report was sent (Lab 61)
+    feedback: Annotated[list[str], operator.add]  # notes from human reviewers (Lab 64)
     trail: Annotated[list[TrailEntry], operator.add]
 
 
@@ -145,11 +148,14 @@ def fallback_report(client_id: str, facts: dict) -> ResearchReport:
 
 
 def report_brief(state: ReportState) -> str:
-    """What the model reads: the client, the facts, and the problems of the last draft."""
+    """What the model reads: the client, the facts, reviewer notes, and the last problems."""
     brief = (
         f"Client {state['client_id']} ({state['client_profile']}).\n"
         f"Facts (JSON): {json.dumps(state['facts'])}"
     )
+    notes = state.get("feedback", [])
+    if notes:
+        brief += "\nReviewer notes (follow them where the facts allow): " + "; ".join(notes)
     if state["problems"]:
         brief += (
             "\nYour previous report was sent back: "

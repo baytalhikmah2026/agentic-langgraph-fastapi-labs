@@ -13,9 +13,15 @@ from sovereign_brain.core.rate_limit import model_call_gate
 from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
+from sovereign_brain.db.models import Approval, User
 from sovereign_brain.db.repository import Approvals, Clients
 from sovereign_brain.graphs.trail import mark
-from sovereign_brain.schemas.approvals import ApprovalStatus, ApprovalSummary, Decision
+from sovereign_brain.schemas.approvals import (
+    ApprovalStatus,
+    ApprovalSummary,
+    Decision,
+    Feedback,
+)
 
 router = APIRouter(
     prefix="/v1/approvals", tags=["approvals"], dependencies=[Depends(get_current_user)]
@@ -63,6 +69,7 @@ def approval_status(approval_id: str, snapshot: StateSnapshot) -> ApprovalStatus
         report=values.get("report"),
         checked=values.get("checked"),
         delivered=values.get("delivered"),
+        feedback=values.get("feedback", []),
         trail=values.get("trail", []),
     )
 
@@ -139,16 +146,10 @@ async def continue_run(
     return await saved_status(approval_id, graph)
 
 
-@router.post("/{approval_id}/decision")
-async def decide(
-    approval_id: ApprovalId,
-    decision: Decision,
-    user: CurrentUser,
-    approvals: Approvals,
-    graph: ApprovalGraph,
-    context: RunContext,
-) -> ApprovalStatus:
-    """Approve (the report is delivered) or reject (it is never sent), by a second person."""
+async def waiting_record(
+    approval_id: str, user: User, approvals: Approvals, graph: CompiledStateGraph
+) -> Approval:
+    """The gates of every decision (Labs 63-64): registered, waiting, and not your own."""
     current = await saved_status(approval_id, graph)
     record = await approvals.get(approval_id)
     if record is None:
@@ -159,6 +160,20 @@ async def decide(
     if record.requested_by == user.username:  # the four-eyes rule
         detail = "You requested this report; a second person must decide"
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
+    return record
+
+
+@router.post("/{approval_id}/decision")
+async def decide(
+    approval_id: ApprovalId,
+    decision: Decision,
+    user: CurrentUser,
+    approvals: Approvals,
+    graph: ApprovalGraph,
+    context: RunContext,
+) -> ApprovalStatus:
+    """Approve (the report is delivered) or reject (it is never sent), by a second person."""
+    record = await waiting_record(approval_id, user, approvals, graph)
     config = approval_config(approval_id)
     if decision.action == "approve":
         await graph.ainvoke(None, config=config, context=context)  # runs deliver
@@ -169,4 +184,26 @@ async def decide(
     outcome = "approved" if decision.action == "approve" else "rejected"
     await approvals.decide(record, outcome, decided_by=user.username, comment=decision.comment)
     logger.info("Approval %s %s by %s", approval_id, outcome, user.username)
+    return await saved_status(approval_id, graph)
+
+
+@router.post("/{approval_id}/feedback", dependencies=[Depends(model_call_gate)])
+async def send_back(
+    approval_id: ApprovalId,
+    feedback: Feedback,
+    user: CurrentUser,
+    approvals: Approvals,
+    graph: ApprovalGraph,
+    context: RunContext,
+) -> ApprovalStatus:
+    """Send a waiting report back with a reviewer's note; a new draft returns for approval."""
+    await waiting_record(approval_id, user, approvals, graph)
+    config = approval_config(approval_id)
+    note = f"{user.username}: {feedback.comment}"
+    trail = mark("check", f"Sent back by {note}")
+    update = {"feedback": [note], "verdict": "retry", "trail": trail}
+    # Written as if the guardrail had sent the draft back: the run's next station is draft
+    await graph.aupdate_state(config, update, as_node="check")
+    await graph.ainvoke(None, config=config, context=context)  # new draft, check, hold line
+    logger.info("Approval %s sent back by %s", approval_id, user.username)
     return await saved_status(approval_id, graph)

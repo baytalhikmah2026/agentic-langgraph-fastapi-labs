@@ -1,6 +1,11 @@
-"""The report's facts and rules (Lab 49): plain code, no model."""
+"""The report's facts and rules (Labs 49, 64): plain code, no model."""
 
-from sovereign_brain.graphs.report import fallback_report, report_problems, sector_facts
+from sovereign_brain.graphs.report import (
+    fallback_report,
+    report_brief,
+    report_problems,
+    sector_facts,
+)
 from sovereign_brain.schemas.report import ResearchReport
 
 PORTFOLIO = {
@@ -52,3 +57,20 @@ def test_every_mismatch_is_listed() -> None:
         "risk_level must be high",
         "these figures are not in the facts: 25",
     ]
+
+
+def test_reviewer_notes_reach_the_next_brief() -> None:
+    state = {
+        "client_id": "C-1042",
+        "client_profile": "Amina Rahman Holdings, private-banking, risk profile moderate",
+        "facts": sector_facts(PORTFOLIO),
+        "problems": [],
+        "feedback": ["omar: Mention both energy holdings by name."],
+    }
+
+    brief = report_brief(state)
+
+    assert brief.endswith(
+        "Reviewer notes (follow them where the facts allow): "
+        "omar: Mention both energy holdings by name."
+    )

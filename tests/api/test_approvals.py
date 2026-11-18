@@ -152,3 +152,55 @@ def test_a_rejected_report_stays_unsent(
     assert rejected.json()["trail"][-1]["note"] == "Rejected by omar: Please add the bond holdings."
     assert list(tmp_path.iterdir()) == []
     assert again.status_code == 409  # a decided report stays decided
+
+
+def test_feedback_brings_back_a_new_draft(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    omar_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    better = {**GOOD, "headline": "Medina Bank alone is 81.5% of the portfolio."}
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"), as_report(better, "r2"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+
+    response = client.post(
+        f"/v1/approvals/{approval_id}/feedback",
+        json={"comment": "Name the bank in the headline."},
+        headers=omar_headers,
+    )
+
+    body = response.json()
+    assert body["status"] == "awaiting_approval"
+    assert body["feedback"] == ["omar: Name the bank in the headline."]
+    assert body["report"]["headline"] == better["headline"]
+    assert [step["note"] for step in body["trail"]][-3:] == [
+        "Sent back by omar: Name the bank in the headline.",
+        "Draft 2 written",
+        "Report matches the facts",
+    ]
+
+
+def test_the_requester_cannot_send_back_their_own_report(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+
+    response = client.post(
+        f"/v1/approvals/{approval_id}/feedback",
+        json={"comment": "Looks fine."},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403

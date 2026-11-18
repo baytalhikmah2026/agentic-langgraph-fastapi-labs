@@ -1,4 +1,4 @@
-"""Human approval (Labs 61-63): pauses before deliver, after a draft on request, rejection."""
+"""Human approval (Labs 61-64): pauses, rejection, and feedback that goes back to the desk."""
 
 import json
 from collections.abc import Callable
@@ -109,3 +109,27 @@ async def test_a_rejected_report_is_never_sent(make_model: Callable, tmp_path: P
     assert snapshot.next == ()  # the run is over
     assert "delivered" not in snapshot.values
     assert list(tmp_path.iterdir()) == []  # and nothing was sent
+
+
+async def test_feedback_sends_the_report_back_to_draft(
+    make_model: Callable, tmp_path: Path
+) -> None:
+    better = {**GOOD, "headline": "Medina Bank alone is 81.5% of the portfolio."}
+    graph = build_report_graph(
+        make_model([as_report(GOOD, "r1"), as_report(better, "r2")]),
+        checkpointer=InMemorySaver(),
+        outbox=tmp_path,
+    )
+    await graph.ainvoke(REQUEST, config=CONFIG, context=CONTEXT)
+
+    update = {"feedback": ["omar: Name the bank."], "verdict": "retry"}
+    await graph.aupdate_state(CONFIG, update, as_node="check")  # as if check sent it back
+    sent_back = await graph.aget_state(CONFIG)
+    await graph.ainvoke(None, config=CONFIG, context=CONTEXT)
+    redrafted = await graph.aget_state(CONFIG)
+
+    assert sent_back.next == ("draft",)
+    assert redrafted.next == ("deliver",)  # back at the hold line, waiting again
+    assert redrafted.values["report"] == better
+    assert redrafted.values["feedback"] == ["omar: Name the bank."]
+    assert redrafted.values["attempts"] == 2
