@@ -17,3 +17,25 @@ images:
     newName: localhost:5001/qdrant/qdrant
   - name: ollama/ollama
     newName: localhost:5001/ollama/ollama
+# Lab 95: our own image is re-delivered under the same tag after code changes, so the node
+# always asks the bank's registry for the newest copy (a quick, local check)
+patches:
+  - target:
+      kind: Rollout
+      name: api
+    patch: &always |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: Deployment
+      name: market
+    patch: *always
+  - target:
+      kind: Deployment
+      name: research-worker
+    patch: *always
+  - target:
+      kind: Job
+      name: seed-db
+    patch: *always

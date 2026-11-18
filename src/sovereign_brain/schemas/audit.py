@@ -28,3 +28,11 @@ class SecurityReport(BaseModel):
 
     posture: dict
     signature: str
+
+
+class ComplianceReport(BaseModel):
+    """A compliance report and its seal (Lab 95)."""
+
+    report: dict
+    signature: str
+    key_id: str

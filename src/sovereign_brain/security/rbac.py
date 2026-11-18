@@ -23,6 +23,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "approvals:read": frozenset({"analyst", "lead", "auditor"}),
     "audit:read": frozenset({"lead", "auditor"}),  # Lab 77
     "privacy:erase": frozenset({"lead"}),  # Lab 78
+    "compliance:read": frozenset({"lead", "auditor", "regulator"}),  # Lab 95
 }
 
 

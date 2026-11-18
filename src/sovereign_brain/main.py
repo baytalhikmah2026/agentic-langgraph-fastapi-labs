@@ -21,6 +21,7 @@ from sovereign_brain.api.v1 import (
     auth,
     cases,
     clients,
+    compliance,
     documents,
     graphs,
     health,
@@ -186,6 +187,7 @@ def create_app() -> FastAPI:
     app.include_router(audit.router)
     app.include_router(privacy.router)
     app.include_router(security.router)
+    app.include_router(compliance.router)  # Lab 95
     return app
 
 
