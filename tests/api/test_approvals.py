@@ -365,3 +365,29 @@ def test_the_history_tells_the_whole_story(
     assert actors[0] == "amina" and actors[-1] == "omar"
     assert "layla" in actors
     assert record["steps"][-1]["next"] == []  # finished
+
+
+def test_an_auditor_reads_but_cannot_act(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    yusuf_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    approve = {"action": "approve"}
+
+    listed = client.get("/v1/approvals", headers=yusuf_headers)
+    history = client.get(f"/v1/approvals/{approval_id}/history", headers=yusuf_headers)
+    decided = client.post(
+        f"/v1/approvals/{approval_id}/decision", json=approve, headers=yusuf_headers
+    )
+    requested = client.post("/v1/approvals/reports/C-1042", headers=yusuf_headers)
+
+    assert (listed.status_code, history.status_code) == (200, 200)
+    assert (decided.status_code, requested.status_code) == (403, 403)
+    assert decided.json()["message"] == "The role auditor may not use approvals:decide"

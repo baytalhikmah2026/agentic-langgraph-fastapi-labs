@@ -1,5 +1,9 @@
 from fastapi.testclient import TestClient
 
+from sovereign_brain.core.security import create_access_token
+from sovereign_brain.core.settings import get_settings
+from sovereign_brain.db.models import User
+
 
 def test_login_returns_a_bearer_token(client: TestClient, password: str) -> None:
     response = client.post("/v1/auth/token", data={"username": "amina", "password": password})
@@ -40,3 +44,13 @@ def test_research_without_a_token_is_401(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json()["message"] == "Not authenticated"
+
+
+def test_a_token_from_an_old_role_is_refused(client: TestClient) -> None:
+    promoted = User(username="amina", full_name="Amina Rahman", role="lead", disabled=False)
+    token, _ = create_access_token(promoted, get_settings())  # signed, but the role is wrong
+
+    response = client.get("/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 401
+    assert response.json()["message"] == "Your role has changed; please sign in again"

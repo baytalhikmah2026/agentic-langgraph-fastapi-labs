@@ -15,6 +15,7 @@ from sovereign_brain.services.portfolio import PortfolioService
 class ResearchContext:
     portfolio: PortfolioService  # where the facts come from
     analyst: str  # who asked: written to the audit trail
+    role: str = "analyst"  # their role (Lab 73): graphs check it before sensitive steps
     max_revisions: int = 2  # how often the review may send a draft back
     router: Literal["rules", "model"] = "rules"  # who chooses the track (Lab 30)
     memory: SemanticMemory | None = None  # long-term memory in Qdrant; None = off (Lab 38)

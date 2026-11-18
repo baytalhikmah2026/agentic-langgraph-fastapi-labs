@@ -1,10 +1,12 @@
-"""Human approval (Labs 61-65): pauses, rejection, feedback and overrides."""
+"""Human approval (Labs 61-65, 73): pauses, rejection, feedback, overrides and roles."""
 
 import json
+from dataclasses import replace
 from collections.abc import Callable
 from pathlib import Path
 
 from langchain_core.messages import AIMessage
+import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from sovereign_brain.graphs.context import ResearchContext
@@ -153,3 +155,17 @@ async def test_a_fallback_override_changes_the_route(
     assert switched.next == ("fallback",)
     assert after.next == ("deliver",)  # still waits for a person
     assert after.values["report"] == plain.model_dump()
+
+
+async def test_the_graph_refuses_a_release_by_an_auditor(
+    make_model: Callable, tmp_path: Path
+) -> None:
+    graph = build_report_graph(
+        make_model([as_report(GOOD, "r1")]), checkpointer=InMemorySaver(), outbox=tmp_path
+    )
+    await graph.ainvoke(REQUEST, config=CONFIG, context=CONTEXT)
+
+    with pytest.raises(PermissionError):
+        await graph.ainvoke(None, config=CONFIG, context=replace(CONTEXT, role="auditor"))
+
+    assert list(tmp_path.iterdir()) == []  # nothing was sent

@@ -29,6 +29,7 @@ from sovereign_brain.schemas.approvals import (
     HistoryStep,
     Override,
 )
+from sovereign_brain.security.rbac import require
 
 router = APIRouter(
     prefix="/v1/approvals", tags=["approvals"], dependencies=[Depends(get_current_user)]
@@ -101,7 +102,10 @@ async def saved_status(approval_id: str, graph: CompiledStateGraph) -> ApprovalS
     return approval_status(approval_id, snapshot)
 
 
-@router.post("/reports/{client_id}", dependencies=[Depends(model_call_gate)])
+@router.post(
+    "/reports/{client_id}",
+    dependencies=[Depends(require("approvals:request")), Depends(model_call_gate)],
+)
 async def request_report(
     client_id: ClientId,
     clients: Clients,
@@ -133,7 +137,7 @@ async def request_report(
     return await saved_status(approval_id, graph)
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require("approvals:read"))])
 async def list_waiting(approvals: Approvals) -> list[ApprovalSummary]:
     """Every report still waiting for a decision, oldest first (Lab 63)."""
     return [
@@ -147,13 +151,16 @@ async def list_waiting(approvals: Approvals) -> list[ApprovalSummary]:
     ]
 
 
-@router.get("/{approval_id}")
+@router.get("/{approval_id}", dependencies=[Depends(require("approvals:read"))])
 async def get_approval(approval_id: ApprovalId, graph: ApprovalGraph) -> ApprovalStatus:
     """Where one approval stands, read from the checkpointer (it survives restarts)."""
     return await saved_status(approval_id, graph)
 
 
-@router.post("/{approval_id}/continue", dependencies=[Depends(model_call_gate)])
+@router.post(
+    "/{approval_id}/continue",
+    dependencies=[Depends(require("approvals:request")), Depends(model_call_gate)],
+)
 async def continue_run(
     approval_id: ApprovalId, user: CurrentUser, graph: ApprovalGraph, context: RunContext
 ) -> ApprovalStatus:
@@ -187,7 +194,7 @@ async def waiting_record(
     return record
 
 
-@router.post("/{approval_id}/decision")
+@router.post("/{approval_id}/decision", dependencies=[Depends(require("approvals:decide"))])
 async def decide(
     approval_id: ApprovalId,
     decision: Decision,
@@ -212,7 +219,10 @@ async def decide(
     return await saved_status(approval_id, graph)
 
 
-@router.post("/{approval_id}/feedback", dependencies=[Depends(model_call_gate)])
+@router.post(
+    "/{approval_id}/feedback",
+    dependencies=[Depends(require("approvals:decide")), Depends(model_call_gate)],
+)
 async def send_back(
     approval_id: ApprovalId,
     feedback: Feedback,
@@ -235,7 +245,7 @@ async def send_back(
     return await saved_status(approval_id, graph)
 
 
-@router.post("/{approval_id}/override")
+@router.post("/{approval_id}/override", dependencies=[Depends(require("approvals:override"))])
 async def override(
     approval_id: ApprovalId,
     change: Override,
@@ -245,8 +255,6 @@ async def override(
     context: RunContext,
 ) -> ApprovalStatus:
     """A desk lead changes the run's course: their own report, or the plain fallback (Lab 65)."""
-    if user.role != "lead":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a desk lead can override a report")
     await waiting_record(approval_id, user, approvals, graph)
     config = approval_config(approval_id, actor=user.username)
     note = f"Overridden by {user.username} ({change.mode}): {change.reason}"
@@ -268,7 +276,7 @@ async def override(
     return await saved_status(approval_id, graph)
 
 
-@router.get("/{approval_id}/history")
+@router.get("/{approval_id}/history", dependencies=[Depends(require("approvals:read"))])
 async def history(
     approval_id: ApprovalId, approvals: Approvals, graph: ApprovalGraph
 ) -> ApprovalHistory:

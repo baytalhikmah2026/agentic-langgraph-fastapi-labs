@@ -55,6 +55,8 @@ async def get_current_user(
     user = await users.get(claims.get("sub", ""))
     if user is None or user.disabled:
         raise not_authenticated("Unknown or disabled user")
+    if claims.get("role") != user.role:  # Lab 73: a changed role needs a new sign-in
+        raise not_authenticated("Your role has changed; please sign in again")
     request.state.username = user.username
     return user
 

@@ -15,6 +15,7 @@ Lab 64: a reviewer can send a waiting report back with a note. The note is kept 
 (feedback) and every later draft reads it.
 Lab 65: a desk lead can override a waiting run: replace the report with their own, or switch
 the run to the plain fallback report. Either way it returns to the hold line for approval.
+Lab 73: deliver checks the role of the person releasing the report, inside the graph.
 """
 
 import json
@@ -37,6 +38,7 @@ from sovereign_brain.graphs.context import ResearchContext
 from sovereign_brain.graphs.review import unsupported_figures
 from sovereign_brain.graphs.trail import TrailEntry, mark
 from sovereign_brain.schemas.report import ResearchReport, RiskLevel
+from sovereign_brain.security.rbac import allowed
 
 logger = logging.getLogger("sovereign_brain.report")
 
@@ -215,7 +217,12 @@ def fallback(state: ReportState) -> dict:
 def deliver_to(outbox: Path) -> Callable[..., Awaitable[dict]]:
     """The deliver station for one outbox folder: one JSON file per released report."""
 
-    async def deliver(state: ReportState, config: RunnableConfig) -> dict:
+    async def deliver(
+        state: ReportState, config: RunnableConfig, runtime: Runtime[ResearchContext]
+    ) -> dict:
+        role = runtime.context.role
+        if not allowed(role, "approvals:decide"):  # the graph checks too (Lab 73)
+            raise PermissionError(f"The role {role} may not release reports")
         approval_id = config["configurable"]["thread_id"].rpartition(":")[2]
         outbox.mkdir(parents=True, exist_ok=True)
         path = outbox / f"{approval_id}.json"

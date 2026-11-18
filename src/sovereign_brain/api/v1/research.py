@@ -28,6 +28,7 @@ from sovereign_brain.observability.metrics import INJECTIONS_BLOCKED
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
 from sovereign_brain.security.injection import BLOCKED_QUESTION, injection_rules
 from sovereign_brain.security.pii import get_masker, unmask
+from sovereign_brain.security.rbac import allowed
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.errors import error_reports
 
@@ -80,6 +81,7 @@ def research_context(
     return ResearchContext(
         portfolio=portfolio,
         analyst=user.username,
+        role=user.role,
         max_revisions=settings.max_revisions,
         router=settings.research_router,
         memory=memory,
@@ -115,6 +117,8 @@ class CheckedRequest:
 async def check_request(
     body: ResearchRequest, clients: Clients, user: CurrentUser
 ) -> CheckedRequest:
+    if not allowed(user.role, "research:run"):  # Lab 73
+        raise HTTPException(status.HTTP_403_FORBIDDEN, f"The role {user.role} may not run research")
     rules = injection_rules(body.question)  # the front door (Lab 71)
     if rules:
         INJECTIONS_BLOCKED.labels("question").inc()
