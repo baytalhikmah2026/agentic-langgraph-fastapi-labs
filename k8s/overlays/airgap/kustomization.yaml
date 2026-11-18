@@ -1,0 +1,19 @@
+# The sealed embassy (Lab 91): the standard plan, every image from the bank's own registry
+# (localhost:5001, filled by scripts/airgap_bundle.py), and no way out to the internet
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - no-internet.yaml
+images:
+  - name: sovereign-brain-api
+    newName: localhost:5001/sovereign-brain-api
+    newTag: "0.2.0"
+  - name: postgres
+    newName: localhost:5001/postgres
+  - name: redis
+    newName: localhost:5001/redis
+  - name: qdrant/qdrant
+    newName: localhost:5001/qdrant/qdrant
+  - name: ollama/ollama
+    newName: localhost:5001/ollama/ollama

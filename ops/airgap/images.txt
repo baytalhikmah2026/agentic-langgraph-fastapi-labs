@@ -1,0 +1,7 @@
+# Every image the desk's namespace runs (Lab 91), pinned. The air-gap kit copies these into
+# the bank's own registry; nothing in the namespace is pulled from the internet after that.
+sovereign-brain-api:0.2.0
+postgres:18.6
+redis:8.10.3
+qdrant/qdrant:v1.20.0
+ollama/ollama:0.40.16

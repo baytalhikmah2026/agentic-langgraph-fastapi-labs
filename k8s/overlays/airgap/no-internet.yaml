@@ -1,0 +1,25 @@
+# Zero egress (Lab 91): pods in the desk's namespace may talk to each other and ask the
+# cluster's DNS for names, and nothing else. No internet, no other namespaces.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: no-internet
+spec:
+  podSelector: {}  # every pod in the namespace
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector: {}  # the desk's own pods
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
