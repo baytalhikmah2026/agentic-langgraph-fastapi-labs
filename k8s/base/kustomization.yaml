@@ -5,6 +5,9 @@ namespace: sovereign-brain
 labels:
   - pairs:
       app.kubernetes.io/part-of: sovereign-brain
+# Lab 89: where a Rollout keeps its ConfigMap, Secret and Service references
+configurations:
+  - rollout-transform.yaml
 resources:
   - namespace.yaml
   - postgres.yaml

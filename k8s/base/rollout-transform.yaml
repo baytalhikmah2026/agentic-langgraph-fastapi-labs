@@ -1,0 +1,24 @@
+# Teach Kustomize where a Rollout keeps its references (Lab 89). Kustomize knows Deployments,
+# but Rollout is Argo's own kind; without this, the ConfigMap's hashed name (desk-config-<hash>)
+# would not reach the Rollout. Image tags already work for any kind with a pod template.
+# (A shortened copy of the kustomize configuration Argo Rollouts publishes.)
+nameReference:
+  - kind: ConfigMap
+    version: v1
+    fieldSpecs:
+      - path: spec/template/spec/containers/envFrom/configMapRef/name
+        kind: Rollout
+      - path: spec/template/spec/volumes/configMap/name
+        kind: Rollout
+  - kind: Secret
+    version: v1
+    fieldSpecs:
+      - path: spec/template/spec/volumes/secret/secretName
+        kind: Rollout
+  - kind: Service
+    version: v1
+    fieldSpecs:
+      - path: spec/strategy/blueGreen/activeService
+        kind: Rollout
+      - path: spec/strategy/blueGreen/previewService
+        kind: Rollout

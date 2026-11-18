@@ -1,6 +1,6 @@
 [project]
 name = "sovereign-brain"
-version = "0.1.0"
+version = "0.2.0"
 description = "The AI Research Desk of Crescent Ledger Bank: agents with LangGraph behind FastAPI"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"

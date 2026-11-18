@@ -4,7 +4,7 @@
 
 services:
   api:
-    image: sovereign-brain-api:0.1.0
+    image: sovereign-brain-api:0.2.0
     # the production server: no reload, no file watching
     command: ["fastapi", "run", "src/sovereign_brain/main.py", "--host", "0.0.0.0", "--port", "8000"]
     environment:
@@ -18,7 +18,7 @@ services:
     cpus: 2
 
   market:
-    image: sovereign-brain-api:0.1.0
+    image: sovereign-brain-api:0.2.0
     environment:
       SB_ENVIRONMENT: production
     restart: unless-stopped
@@ -29,7 +29,7 @@ services:
     mem_limit: 512m
 
   sandbox:
-    image: sovereign-brain-api:0.1.0
+    image: sovereign-brain-api:0.2.0
     restart: unless-stopped
 
   postgres:

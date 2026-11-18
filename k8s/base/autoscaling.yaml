@@ -5,9 +5,9 @@ kind: HorizontalPodAutoscaler
 metadata:
   name: api
 spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
+  scaleTargetRef:  # Lab 89: the API is an Argo Rollout now
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
     name: api
   minReplicas: 2
   maxReplicas: 5

@@ -1,4 +1,4 @@
-"""The Kubernetes manifests (Labs 82-87): rules every workload in k8s/base follows."""
+"""The Kubernetes manifests (Labs 82-89): rules every workload in k8s/base follows."""
 
 import tomllib
 from pathlib import Path
@@ -110,3 +110,18 @@ def test_the_front_gate_only_speaks_https() -> None:
     assert ingress["spec"]["ingressClassName"] == "traefik"
     assert ingress["spec"]["tls"][0]["secretName"] == "desk-tls"
     assert annotations["traefik.ingress.kubernetes.io/router.entrypoints"] == "websecure"
+
+
+def test_the_api_is_released_blue_green_by_a_person() -> None:
+    (rollout,) = [doc for doc in documents() if doc["kind"] == "Rollout"]
+    (hpa,) = [doc for doc in documents() if doc["kind"] == "HorizontalPodAutoscaler"]
+    services = {doc["metadata"]["name"] for doc in documents() if doc["kind"] == "Service"}
+    blue_green = rollout["spec"]["strategy"]["blueGreen"]
+
+    assert blue_green["autoPromotionEnabled"] is False
+    assert {blue_green["activeService"], blue_green["previewService"]} <= services
+    assert hpa["spec"]["scaleTargetRef"]["kind"] == "Rollout"
+    # Kustomize must know where the Rollout names its ConfigMap, or the hash never reaches it
+    kustomization = yaml.safe_load((BASE / "kustomization.yaml").read_text(encoding="utf-8"))
+    transform = (BASE / kustomization["configurations"][0]).read_text(encoding="utf-8")
+    assert "envFrom/configMapRef/name" in transform

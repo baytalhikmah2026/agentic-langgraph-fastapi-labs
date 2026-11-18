@@ -5,4 +5,4 @@ resources:
   - ../../base
 images:
   - name: sovereign-brain-api
-    newTag: "0.1.0"
+    newTag: "0.2.0"

@@ -45,7 +45,7 @@ jobs:
       - name: Install the locked dependencies
         run: uv sync --locked
       - name: Build the image
-        run: docker build -t sovereign-brain-api:0.1.0 .
+        run: docker build -t sovereign-brain-api:0.2.0 .
       - name: Start a kind cluster
         uses: helm/kind-action@v1
         with:
@@ -57,23 +57,28 @@ jobs:
         run: |
           kubectl apply --server-side -f https://github.com/kedacore/keda/releases/download/v2.21.0/keda-2.21.0.yaml
           kubectl -n keda wait --for=condition=Available deployment --all --timeout=5m
+      - name: Install Argo Rollouts (Lab 89, the API is a Rollout)
+        run: |
+          kubectl create namespace argo-rollouts
+          kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/download/v1.10.2/install.yaml
+          kubectl -n argo-rollouts wait --for=condition=Available deployment --all --timeout=5m
       - name: Load the image into the cluster
-        run: kind load docker-image sovereign-brain-api:0.1.0 --name sovereign
+        run: kind load docker-image sovereign-brain-api:0.2.0 --name sovereign
       - name: Deploy the desk
         run: |
           kubectl apply -k k8s/overlays/local
           uv run python scripts/make_certs.py
           uv run python scripts/k8s_secrets.py
       - name: Wait until the API is ready
-        run: kubectl -n sovereign-brain rollout status deploy/api --timeout=10m
+        run: kubectl -n sovereign-brain wait --for=condition=Available rollout/api --timeout=10m
       - name: Ask the API itself
         run: >-
-          kubectl -n sovereign-brain exec deploy/api --
+          kubectl -n sovereign-brain exec svc/api --
           python -c "import urllib.request;
           print(urllib.request.urlopen('http://127.0.0.1:8000/health/ready').read().decode())"
       - name: Show the cluster when something failed
         if: failure()
         run: |
           kubectl -n sovereign-brain get pods -o wide
-          kubectl -n sovereign-brain describe deploy api
-          kubectl -n sovereign-brain logs deploy/api --tail 100
+          kubectl -n sovereign-brain describe rollout api
+          kubectl -n sovereign-brain logs -l app.kubernetes.io/name=api --tail 100

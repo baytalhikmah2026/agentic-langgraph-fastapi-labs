@@ -18,7 +18,7 @@ spec:
         runAsGroup: 10001
       containers:
         - name: seed
-          image: sovereign-brain-api:0.1.0
+          image: sovereign-brain-api:0.2.0
           command: ["python", "scripts/seed_db.py"]
           env:
             - name: SB_DATABASE_URL

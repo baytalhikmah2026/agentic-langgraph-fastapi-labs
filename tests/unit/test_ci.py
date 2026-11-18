@@ -1,5 +1,6 @@
-"""The delivery pipeline (Lab 88): it uses the same versions as the rest of the project."""
+"""The delivery pipeline (Labs 88-89): it uses the same versions as the rest of the project."""
 
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -33,3 +34,14 @@ def test_the_pipeline_uses_the_project_versions() -> None:
         assert f"ghcr.io/astral-sh/uv:{uv['with']['version']}" in dockerfile
     assert kind["with"]["config"] == "k8s/kind-config.yaml"
     assert kind["with"]["cluster_name"] == kind_config["name"]
+
+
+def test_the_pipeline_builds_the_project_version() -> None:
+    """Lab 89: after a version change, CI must build and load the same tag the manifests use."""
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    image = f"sovereign-brain-api:{pyproject['project']['version']}"
+    runs = [step.get("run", "") for step in steps("cluster")]
+    runs = [run for run in runs if "sovereign-brain-api:" in run]
+
+    assert len(runs) == 2  # docker build and kind load
+    assert all(image in run for run in runs)

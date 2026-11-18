@@ -12,7 +12,7 @@ def test_health_answers_ok() -> None:
         response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "app": "Sovereign Brain", "version": "0.1.0"}
+    assert response.json() == {"status": "ok", "app": "Sovereign Brain", "version": "0.2.0"}
 
 
 def test_liveness_needs_nothing_but_the_process(client: TestClient) -> None:
