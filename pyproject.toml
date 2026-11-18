@@ -8,6 +8,7 @@ dependencies = [
     "cryptography==50.0.2",
     "en-core-web-sm",
     "fastapi[standard]==0.162.4",
+    "hvac==2.4.0",
     "langchain==1.4.10",
     "langchain-core==1.7.7",
     "langchain-mcp-adapters==0.3.2",

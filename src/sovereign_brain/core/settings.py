@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     # Internal market-data API (Lab 46): only the market MCP server talks to it
     market_api_url: str = "http://localhost:8100"
     market_api_token: SecretStr = SecretStr("local-market-token-change-me")
+    # HashiCorp Vault (Lab 75): empty address means "no Vault" (tests, local runs)
+    vault_addr: str = ""
+    vault_role_id: str = ""
+    vault_secret_id: SecretStr = SecretStr("")
+    vault_secret_path: str = "sovereign-brain/api"
+    vault_root_token: SecretStr = SecretStr("")  # only for scripts/vault_setup.py
     # Mutual TLS to the market API (Lab 74): empty means plain HTTP (tests, local runs)
     market_ca_file: str = ""
     market_client_cert: str = ""
@@ -102,4 +108,9 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if settings.vault_addr:  # Lab 75: the secrets come from Vault, not from .env
+        from sovereign_brain.core.vault import with_vault_secrets  # here: avoids an import loop
+
+        settings = with_vault_secrets(settings)
+    return settings
