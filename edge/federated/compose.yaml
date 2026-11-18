@@ -1,0 +1,58 @@
+# Federated learning (Lab 94): a head office (SuperLink) and two branches (SuperNodes), each
+# branch with its own ClientApp container, all on their own network. Flower 1.43.0.
+#   docker compose -f edge/federated/compose.yaml up -d --build
+name: sb-federated
+
+services:
+  superlink:
+    image: flwr/superlink:1.43.0
+    command: ["--insecure", "--host", "0.0.0.0", "--isolation", "process"]
+    ports:
+      - "8090:8000"  # flwr run talks to the head office here
+
+  supernode-north:
+    image: flwr/supernode:1.43.0
+    command:
+      - --insecure
+      - --superlink=superlink:8000
+      - --node-config=partition-id=0 num-partitions=2
+      - --host=0.0.0.0
+      - --port=9094
+      - --isolation=process
+    depends_on:
+      - superlink
+
+  supernode-south:
+    image: flwr/supernode:1.43.0
+    command:
+      - --insecure
+      - --superlink=superlink:8000
+      - --node-config=partition-id=1 num-partitions=2
+      - --host=0.0.0.0
+      - --port=9095
+      - --isolation=process
+    depends_on:
+      - superlink
+
+  serverapp:
+    build:
+      context: .
+      dockerfile: superexec.Dockerfile
+    image: sb-federated-superexec:1.0.0
+    command: ["--insecure", "--runtime-api-address", "superlink:8000"]
+    depends_on:
+      - superlink
+
+  clientapp-north:
+    image: sb-federated-superexec:1.0.0
+    command: ["--insecure", "--runtime-api-address", "supernode-north:9094"]
+    depends_on:
+      - serverapp
+      - supernode-north
+
+  clientapp-south:
+    image: sb-federated-superexec:1.0.0
+    command: ["--insecure", "--runtime-api-address", "supernode-south:9095"]
+    depends_on:
+      - serverapp
+      - supernode-south

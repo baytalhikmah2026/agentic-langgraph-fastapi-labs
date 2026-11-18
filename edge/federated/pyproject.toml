@@ -1,0 +1,26 @@
+# The federated router (Lab 94): a Flower app of its own, apart from the desk's environment
+# (Flower 1.43 needs an older FastAPI than the desk, so it lives in its own containers).
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "branch-router"
+version = "1.0.0"
+description = "Two bank branches train one question router together, without sharing data"
+dependencies = ["flwr[simulation]==1.43.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["branch_router"]
+
+[tool.flwr.app]
+publisher = "crescent-ledger"
+
+[tool.flwr.app.components]
+serverapp = "branch_router.server_app:app"
+clientapp = "branch_router.client_app:app"
+
+[tool.flwr.app.config]
+num-server-rounds = 5
+local-epochs = 20
+learning-rate = 0.5
