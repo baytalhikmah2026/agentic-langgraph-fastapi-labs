@@ -20,9 +20,9 @@ from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Clients
 from sovereign_brain.graphs.context import ResearchContext
+from sovereign_brain.memory.retention import ThreadRegistry
 from sovereign_brain.memory.semantic import SemanticMemory
 from sovereign_brain.memory.summaries import ThreadArchivist
-from sovereign_brain.memory.retention import ThreadRegistry
 from sovereign_brain.memory.threads import thread_config, thread_key
 from sovereign_brain.observability.metrics import INJECTIONS_BLOCKED
 from sovereign_brain.schemas.research import (

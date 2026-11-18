@@ -1,0 +1,79 @@
+# The delivery pipeline (Lab 88): every push and pull request is checked the same way.
+# 1. checks:  lint with ruff, then the whole test suite (it includes the graph-diagram check)
+# 2. cluster: build the image, start a kind cluster, deploy the desk, wait until the API is ready
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read  # the pipeline only reads the code
+
+concurrency:  # a newer push cancels the older run of the same branch
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.7"
+      - name: Install the locked dependencies
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check .
+      - name: Tests
+        run: uv run pytest -q
+
+  cluster:
+    name: Image and cluster deploy check
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.7"
+      - name: Install the locked dependencies
+        run: uv sync --locked
+      - name: Build the image
+        run: docker build -t sovereign-brain-api:0.1.0 .
+      - name: Start a kind cluster
+        uses: helm/kind-action@v1
+        with:
+          version: v0.33.0
+          kubectl_version: v1.37.2
+          config: k8s/kind-config.yaml
+          cluster_name: sovereign
+      - name: Install KEDA (the ScaledObject needs it)
+        run: |
+          kubectl apply --server-side -f https://github.com/kedacore/keda/releases/download/v2.21.0/keda-2.21.0.yaml
+          kubectl -n keda wait --for=condition=Available deployment --all --timeout=5m
+      - name: Load the image into the cluster
+        run: kind load docker-image sovereign-brain-api:0.1.0 --name sovereign
+      - name: Deploy the desk
+        run: |
+          kubectl apply -k k8s/overlays/local
+          uv run python scripts/make_certs.py
+          uv run python scripts/k8s_secrets.py
+      - name: Wait until the API is ready
+        run: kubectl -n sovereign-brain rollout status deploy/api --timeout=10m
+      - name: Ask the API itself
+        run: >-
+          kubectl -n sovereign-brain exec deploy/api --
+          python -c "import urllib.request;
+          print(urllib.request.urlopen('http://127.0.0.1:8000/health/ready').read().decode())"
+      - name: Show the cluster when something failed
+        if: failure()
+        run: |
+          kubectl -n sovereign-brain get pods -o wide
+          kubectl -n sovereign-brain describe deploy api
+          kubectl -n sovereign-brain logs deploy/api --tail 100

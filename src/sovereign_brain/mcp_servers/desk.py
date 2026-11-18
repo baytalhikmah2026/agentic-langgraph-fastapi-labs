@@ -39,7 +39,9 @@ class RiskLimit(BaseModel):
 
 @server.tool()
 def risk_limit(
-    risk_profile: Annotated[RiskProfile, Field(description="conservative, moderate, growth or aggressive")],
+    risk_profile: Annotated[
+        RiskProfile, Field(description="conservative, moderate, growth or aggressive")
+    ],
 ) -> RiskLimit:
     """The largest loss from one sector shock that a risk profile accepts, in % of the portfolio."""
     return RiskLimit(risk_profile=risk_profile, max_loss_percent=LOSS_LIMITS[risk_profile])

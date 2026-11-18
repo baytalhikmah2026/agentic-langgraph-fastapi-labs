@@ -51,7 +51,7 @@ def stress_test_tool(
     shock_percent: float,
     risk_profile: RiskProfile,
 ) -> dict:
-    """Loss if one sector's prices fell by shock_percent, and whether the risk profile accepts it."""
+    """Loss if one sector fell by shock_percent, and whether the risk profile accepts it."""
     result = stress_test(
         client_id, sector, sector_value_usd, portfolio_value_usd, shock_percent, risk_profile
     )
