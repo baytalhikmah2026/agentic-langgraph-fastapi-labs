@@ -17,6 +17,7 @@ from sovereign_brain.db.models import Approval, User
 from sovereign_brain.db.repository import Approvals, Clients
 from sovereign_brain.graphs.report import report_problems
 from sovereign_brain.graphs.trail import mark
+from sovereign_brain.observability.metrics import APPROVAL_ACTIONS
 from sovereign_brain.schemas.approvals import (
     ApprovalStatus,
     ApprovalSummary,
@@ -194,6 +195,7 @@ async def decide(
         await graph.aupdate_state(config, {"trail": mark("deliver", note)}, as_node="deliver")
     outcome = "approved" if decision.action == "approve" else "rejected"
     await approvals.decide(record, outcome, decided_by=user.username, comment=decision.comment)
+    APPROVAL_ACTIONS.labels(outcome).inc()  # Lab 68
     logger.info("Approval %s %s by %s", approval_id, outcome, user.username)
     return await saved_status(approval_id, graph)
 
@@ -216,6 +218,7 @@ async def send_back(
     # Written as if the guardrail had sent the draft back: the run's next station is draft
     await graph.aupdate_state(config, update, as_node="check")
     await graph.ainvoke(None, config=config, context=context)  # new draft, check, hold line
+    APPROVAL_ACTIONS.labels("sent_back").inc()  # Lab 68
     logger.info("Approval %s sent back by %s", approval_id, user.username)
     return await saved_status(approval_id, graph)
 
@@ -248,5 +251,6 @@ async def override(
     await graph.aupdate_state(config, update, as_node="check")
     if change.mode == "fallback":
         await graph.ainvoke(None, config=config, context=context)  # fallback, then hold line
+    APPROVAL_ACTIONS.labels(f"override_{change.mode}").inc()  # Lab 68
     logger.info("Approval %s overridden by %s (%s)", approval_id, user.username, change.mode)
     return await saved_status(approval_id, graph)

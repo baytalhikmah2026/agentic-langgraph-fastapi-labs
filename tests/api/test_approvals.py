@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from prometheus_client import REGISTRY
 
 from sovereign_brain.api.v1.approvals import get_approval_graph
 from sovereign_brain.graphs.report import build_report_graph
@@ -306,3 +307,29 @@ def test_a_lead_switches_to_the_fallback_report(
     assert body["status"] == "awaiting_approval"
     assert body["checked"] is False  # the plain report is written by code, not checked
     assert [step["node"] for step in body["trail"]][-2:] == ["check", "fallback"]
+
+
+def test_decisions_are_counted_for_prometheus(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    omar_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    before = REGISTRY.get_sample_value("sb_approval_actions_total", {"action": "rejected"}) or 0
+
+    client.post(
+        f"/v1/approvals/{approval_id}/decision", json={"action": "reject"}, headers=omar_headers
+    )
+    page = client.get("/metrics")
+
+    assert REGISTRY.get_sample_value("sb_approval_actions_total", {"action": "rejected"}) == (
+        before + 1
+    )
+    assert page.status_code == 200
+    assert 'sb_approval_actions_total{action="rejected"}' in page.text

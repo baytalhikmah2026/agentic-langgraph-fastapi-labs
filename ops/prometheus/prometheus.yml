@@ -1,0 +1,9 @@
+# Prometheus (Lab 68): read the API's /metrics page every 15 seconds.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: sovereign-brain-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]

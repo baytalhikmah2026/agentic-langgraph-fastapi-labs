@@ -52,6 +52,7 @@ from sovereign_brain.memory.retention import ThreadRegistry, cleanup_worker
 from sovereign_brain.memory.semantic import SemanticMemory
 from sovereign_brain.memory.shared_state import open_shared_store
 from sovereign_brain.memory.summaries import ThreadArchivist
+from sovereign_brain.observability import metrics
 from sovereign_brain.observability.tracing import setup_tracing
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.mcp_host import load_mcp_tools
@@ -154,6 +155,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
     app.state.tracer_provider = setup_tracing(app, settings)  # Lab 66, if switched on
     app.include_router(health.router)
+    app.include_router(metrics.router)  # GET /metrics for Prometheus (Lab 68)
     app.include_router(auth.router)
     app.include_router(research.router)
     app.include_router(clients.router)

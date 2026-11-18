@@ -125,7 +125,10 @@ def setup_tracing(app: FastAPI, settings: Settings) -> TracerProvider | None:
     exporter = OTLPSpanExporter(endpoint=f"{settings.otel_endpoint}/v1/traces")
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
-    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider, excluded_urls="health")
+    # Health checks and Prometheus visits come every few seconds: no traces for them
+    FastAPIInstrumentor.instrument_app(
+        app, tracer_provider=provider, excluded_urls="health,metrics"
+    )
     # Every LangChain/LangGraph run in this process picks up the tracer through this hook
     tracer = GraphTracer(provider.get_tracer("sovereign_brain.graphs"))
     register_configure_hook(ContextVar("sb_graph_tracer", default=tracer), inheritable=True)

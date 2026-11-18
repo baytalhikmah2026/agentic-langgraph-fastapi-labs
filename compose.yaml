@@ -171,6 +171,18 @@ services:
     ports:
       - "16686:16686"
 
+  prometheus:
+    # Metrics (Lab 68): reads the API's /metrics page; open http://localhost:9090
+    image: prom/prometheus:v3.16.0
+    container_name: sb-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      - api
+
   vllm:
     # Optional, NVIDIA GPU only: docker compose --profile gpu up -d vllm
     image: vllm/vllm-openai:v0.33.0
@@ -200,3 +212,4 @@ volumes:
   redis-data:
   qdrant-data:
   hf-cache:
+  prometheus-data:
