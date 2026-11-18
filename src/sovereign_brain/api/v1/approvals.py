@@ -44,11 +44,16 @@ ApprovalGraph = Annotated[CompiledStateGraph, Depends(get_approval_graph)]
 
 
 def approval_config(approval_id: str) -> dict:
-    """Every approval is its own thread in the checkpointer: "approval:<id>"."""
+    """Every approval is its own thread in the checkpointer: "approval:<id>".
+
+    Lab 67: the tag and the approval_id label each run, so trace viewers (LangSmith, Jaeger)
+    can filter all the runs of one approval.
+    """
     return {
         "configurable": {"thread_id": f"approval:{approval_id}"},
         "recursion_limit": get_settings().graph_recursion_limit,
-        "metadata": {"request_id": get_request_id()},
+        "tags": ["approvals"],
+        "metadata": {"request_id": get_request_id(), "approval_id": approval_id},
     }
 
 
