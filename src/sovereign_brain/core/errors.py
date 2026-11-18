@@ -34,6 +34,7 @@ def error_response(
 
 async def http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     names = {
+        400: "bad_request",
         401: "unauthorized",
         403: "forbidden",
         404: "not_found",

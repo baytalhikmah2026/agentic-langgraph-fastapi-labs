@@ -35,6 +35,9 @@ MODEL_SECONDS = Histogram(
 MODEL_TOKENS = Counter(
     "sb_model_tokens", "Model tokens, by model and kind (input or output)", ["model", "kind"]
 )
+INJECTIONS_BLOCKED = Counter(
+    "sb_injections_blocked", "Texts stopped by the injection guard (Lab 71), by door", ["door"]
+)
 APPROVAL_ACTIONS = Counter(
     "sb_approval_actions",
     "What people did with waiting reports (approved, rejected, sent_back, override_edit ...)",

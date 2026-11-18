@@ -4,6 +4,7 @@ Each server is a separate process that speaks the Model Context Protocol over st
 adapter library (langchain-mcp-adapters) discovers their tools at start-up, so the agent's tool
 wall grows without changing the graph. Every MCP call is written to the audit log.
 Lab 46: a server can get its own environment variables; only "market" gets the API token.
+Lab 71: every tool result is checked by the injection guard before the model reads it.
 """
 
 import logging
@@ -15,8 +16,11 @@ from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest, MCPToolCallResult
 from langchain_mcp_adapters.sessions import Connection
+from mcp.types import CallToolResult, TextContent
 
 from sovereign_brain.core.settings import Settings
+from sovereign_brain.observability.metrics import INJECTIONS_BLOCKED
+from sovereign_brain.security.injection import QUARANTINED, injection_rules
 
 logger = logging.getLogger("sovereign_brain.mcp")
 audit = logging.getLogger("sovereign_brain.audit.mcp")
@@ -84,6 +88,25 @@ async def audit_tool_call(
         )
 
 
+async def screen_tool_result(
+    request: MCPToolCallRequest,
+    handler: Callable[[MCPToolCallRequest], Awaitable[MCPToolCallResult]],
+) -> MCPToolCallResult:
+    """The tool wall's guard (Lab 71): a result that gives orders never reaches the model."""
+    result = await handler(request)
+    if not isinstance(result, CallToolResult):
+        return result
+    text = " ".join(block.text for block in result.content if isinstance(block, TextContent))
+    rules = injection_rules(text)
+    if not rules:
+        return result
+    INJECTIONS_BLOCKED.labels("tool_result").inc()
+    logger.warning(
+        "Injection guard quarantined %s.%s: %s", request.server_name, request.name, rules
+    )
+    return CallToolResult(content=[TextContent(type="text", text=QUARANTINED)])
+
+
 async def load_mcp_tools(settings: Settings, names: list[str] | None = None) -> list[BaseTool]:
     """Discover the tools of the given MCP servers (default: SB_MCP_SERVERS); none if unreachable.
 
@@ -93,7 +116,8 @@ async def load_mcp_tools(settings: Settings, names: list[str] | None = None) -> 
     if not names:
         return []
     client = MultiServerMCPClient(
-        server_connections(names, settings), tool_interceptors=[audit_tool_call]
+        server_connections(names, settings),
+        tool_interceptors=[audit_tool_call, screen_tool_result],  # guard added in Lab 71
     )
     try:
         tools = await client.get_tools()

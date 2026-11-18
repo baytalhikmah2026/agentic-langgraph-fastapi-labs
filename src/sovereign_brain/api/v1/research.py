@@ -24,7 +24,9 @@ from sovereign_brain.memory.semantic import SemanticMemory
 from sovereign_brain.memory.summaries import ThreadArchivist
 from sovereign_brain.memory.retention import ThreadRegistry
 from sovereign_brain.memory.threads import thread_config, thread_key
+from sovereign_brain.observability.metrics import INJECTIONS_BLOCKED
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
+from sovereign_brain.security.injection import BLOCKED_QUESTION, injection_rules
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.errors import error_reports
 
@@ -111,6 +113,11 @@ class CheckedRequest:
 async def check_request(
     body: ResearchRequest, clients: Clients, user: CurrentUser
 ) -> CheckedRequest:
+    rules = injection_rules(body.question)  # the front door (Lab 71)
+    if rules:
+        INJECTIONS_BLOCKED.labels("question").inc()
+        logger.warning("Injection guard stopped a question from %s: %s", user.username, rules)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BLOCKED_QUESTION)
     client = await clients.get(body.client_id)
     if client is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Client {body.client_id} not found")
