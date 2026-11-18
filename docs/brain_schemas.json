@@ -1,0 +1,419 @@
+{
+  "AnalysisDraft": {
+    "$defs": {
+      "Figure": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 80,
+            "title": "Label",
+            "type": "string"
+          },
+          "unit": {
+            "enum": [
+              "USD",
+              "%"
+            ],
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "unit"
+        ],
+        "title": "Figure",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Analysis's result: the brief, its figures and risks, in a shape code can check.",
+    "properties": {
+      "confidence": {
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Confidence",
+        "type": "number"
+      },
+      "figures": {
+        "items": {
+          "$ref": "#/$defs/Figure"
+        },
+        "maxItems": 10,
+        "title": "Figures",
+        "type": "array"
+      },
+      "risks": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 5,
+        "title": "Risks",
+        "type": "array"
+      },
+      "summary": {
+        "maxLength": 1500,
+        "minLength": 20,
+        "title": "Summary",
+        "type": "string"
+      }
+    },
+    "required": [
+      "summary",
+      "confidence"
+    ],
+    "title": "AnalysisDraft",
+    "type": "object"
+  },
+  "BrainEvent": {
+    "additionalProperties": false,
+    "description": "One message on the Brain's live channel (Lab 98), from start to delivery.",
+    "properties": {
+      "agent": {
+        "anyOf": [
+          {
+            "enum": [
+              "extraction",
+              "sanitization",
+              "analysis"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "supervisor",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Agent"
+      },
+      "at": {
+        "format": "date-time",
+        "title": "At",
+        "type": "string"
+      },
+      "data": {
+        "additionalProperties": true,
+        "title": "Data",
+        "type": "object"
+      },
+      "run_id": {
+        "title": "Run Id",
+        "type": "string"
+      },
+      "type": {
+        "enum": [
+          "started",
+          "agent",
+          "approval_needed",
+          "delivered",
+          "rejected",
+          "error"
+        ],
+        "title": "Type",
+        "type": "string"
+      }
+    },
+    "required": [
+      "type",
+      "run_id",
+      "at"
+    ],
+    "title": "BrainEvent",
+    "type": "object"
+  },
+  "BrainRequest": {
+    "additionalProperties": false,
+    "description": "What an analyst asks the Brain (the only part that comes from outside).",
+    "properties": {
+      "client_id": {
+        "examples": [
+          "C-1042"
+        ],
+        "pattern": "^C-\\d{4}$",
+        "title": "Client Id",
+        "type": "string"
+      },
+      "question": {
+        "maxLength": 1000,
+        "minLength": 10,
+        "title": "Question",
+        "type": "string"
+      },
+      "sectors": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 5,
+        "title": "Sectors",
+        "type": "array"
+      }
+    },
+    "required": [
+      "client_id",
+      "question"
+    ],
+    "title": "BrainRequest",
+    "type": "object"
+  },
+  "ExtractedFacts": {
+    "$defs": {
+      "Holding": {
+        "additionalProperties": false,
+        "properties": {
+          "market_value_usd": {
+            "minimum": 0,
+            "title": "Market Value Usd",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 80,
+            "title": "Name",
+            "type": "string"
+          },
+          "price_usd": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Price Usd"
+          },
+          "sector": {
+            "maxLength": 40,
+            "title": "Sector",
+            "type": "string"
+          },
+          "ticker": {
+            "pattern": "^[A-Z0-9]{2,12}$",
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "name",
+          "sector",
+          "market_value_usd"
+        ],
+        "title": "Holding",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Extraction's result: only facts the desk's tools returned, with their sources.",
+    "properties": {
+      "client_id": {
+        "pattern": "^C-\\d{4}$",
+        "title": "Client Id",
+        "type": "string"
+      },
+      "holdings": {
+        "items": {
+          "$ref": "#/$defs/Holding"
+        },
+        "maxItems": 50,
+        "title": "Holdings",
+        "type": "array"
+      },
+      "notes": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 5,
+        "title": "Notes",
+        "type": "array"
+      },
+      "portfolio_value_usd": {
+        "minimum": 0,
+        "title": "Portfolio Value Usd",
+        "type": "integer"
+      },
+      "sources": {
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1,
+        "title": "Sources",
+        "type": "array"
+      }
+    },
+    "required": [
+      "client_id",
+      "holdings",
+      "portfolio_value_usd",
+      "sources"
+    ],
+    "title": "ExtractedFacts",
+    "type": "object"
+  },
+  "SanitizedFacts": {
+    "$defs": {
+      "ExtractedFacts": {
+        "additionalProperties": false,
+        "description": "Extraction's result: only facts the desk's tools returned, with their sources.",
+        "properties": {
+          "client_id": {
+            "pattern": "^C-\\d{4}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/$defs/Holding"
+            },
+            "maxItems": 50,
+            "title": "Holdings",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Notes",
+            "type": "array"
+          },
+          "portfolio_value_usd": {
+            "minimum": 0,
+            "title": "Portfolio Value Usd",
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "client_id",
+          "holdings",
+          "portfolio_value_usd",
+          "sources"
+        ],
+        "title": "ExtractedFacts",
+        "type": "object"
+      },
+      "Holding": {
+        "additionalProperties": false,
+        "properties": {
+          "market_value_usd": {
+            "minimum": 0,
+            "title": "Market Value Usd",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 80,
+            "title": "Name",
+            "type": "string"
+          },
+          "price_usd": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Price Usd"
+          },
+          "sector": {
+            "maxLength": 40,
+            "title": "Sector",
+            "type": "string"
+          },
+          "ticker": {
+            "pattern": "^[A-Z0-9]{2,12}$",
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "name",
+          "sector",
+          "market_value_usd"
+        ],
+        "title": "Holding",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Sanitization's result: the same facts, safe for the model to read.",
+    "properties": {
+      "facts": {
+        "$ref": "#/$defs/ExtractedFacts"
+      },
+      "masked_values": {
+        "minimum": 0,
+        "title": "Masked Values",
+        "type": "integer"
+      },
+      "quarantined_notes": {
+        "minimum": 0,
+        "title": "Quarantined Notes",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "facts",
+      "masked_values",
+      "quarantined_notes"
+    ],
+    "title": "SanitizedFacts",
+    "type": "object"
+  },
+  "SupervisorDecision": {
+    "additionalProperties": false,
+    "description": "The supervisor's choice: which specialist works next, or finish.",
+    "properties": {
+      "next": {
+        "anyOf": [
+          {
+            "enum": [
+              "extraction",
+              "sanitization",
+              "analysis"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "finish",
+            "type": "string"
+          }
+        ],
+        "title": "Next"
+      },
+      "reason": {
+        "maxLength": 300,
+        "title": "Reason",
+        "type": "string"
+      }
+    },
+    "required": [
+      "next",
+      "reason"
+    ],
+    "title": "SupervisorDecision",
+    "type": "object"
+  }
+}
