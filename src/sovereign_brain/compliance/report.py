@@ -13,12 +13,19 @@ from datetime import UTC, datetime, timedelta
 
 from sovereign_brain.security.audit_chain import GENESIS, ChainEvent, verify_chain
 
-DECISIONS = ("approval.approved", "approval.rejected")
+DECISIONS = ("approval.approved", "approval.rejected", "brain.approved", "brain.rejected")
 
 
 def four_eyes_breaches(events: Sequence[ChainEvent]) -> list[str]:
-    """Approvals decided by the same person who requested them (should be none)."""
+    """Approvals decided by the same person who requested them (should be none).
+
+    Reports name their requester in an "approval.requested" entry (Lab 63); Brain decisions
+    carry it in their own sealed details (Lab 98).
+    """
     requested_by = {e.subject: e.actor for e in events if e.action == "approval.requested"}
+    for e in events:
+        if e.action.startswith("brain."):
+            requested_by[e.subject] = json.loads(e.details).get("requested_by", "")
     return sorted(
         e.subject
         for e in events

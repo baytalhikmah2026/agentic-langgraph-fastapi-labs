@@ -66,6 +66,7 @@ def test_a_run_waits_for_a_second_person_and_is_sealed(
     assert entry["action"] == "brain.approved"
     statement = {k: v for k, v in entry["details"].items() if k != "signature"}
     assert verify(statement, entry["details"]["signature"], key["public_key_pem"])
+    assert 'sb_brain_runs_total{outcome="approved"}' in client.get("/metrics").text  # Lab 100
 
 
 def test_the_live_channel_streams_every_step(

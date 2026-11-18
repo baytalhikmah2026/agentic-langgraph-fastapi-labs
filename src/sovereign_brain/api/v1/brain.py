@@ -27,6 +27,7 @@ from sovereign_brain.core.security import CurrentUser, token_scopes, user_from_t
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import AuditLog, Users
 from sovereign_brain.memory.threads import thread_config
+from sovereign_brain.observability.metrics import BRAIN_RUNS
 from sovereign_brain.schemas.approvals import Decision
 from sovereign_brain.security.rbac import require, require_scope
 from sovereign_brain.security.signing import report_hash
@@ -116,6 +117,7 @@ async def start_run(
         config=run_config(run_id),
         context=brain_context(connection, portfolio, user.username),
     )
+    BRAIN_RUNS.labels("started").inc()  # Lab 100: on the Grafana dashboard next to the others
     return await run_status(graph, run_id)
 
 
@@ -157,6 +159,7 @@ async def decide_run(
     }
     details = {**statement, "signature": signer.sign(statement)}
     outcome = OUTCOMES[decision.action]
+    BRAIN_RUNS.labels(outcome).inc()
     await audit.append(user.username, f"brain.{outcome}", run_id, details)  # DORA record
     logger.info("Brain run %s %s by %s", run_id, outcome, user.username)
     return await run_status(graph, run_id)
@@ -188,6 +191,7 @@ async def live_run(
         request = BrainRequest.model_validate_json(await websocket.receive_text())
         await websocket.send_json(event("started", run_id, client_id=request.client_id))
         start = {"request": request.model_dump(), "requested_by": username, "steps": []}
+        BRAIN_RUNS.labels("started").inc()
         async for update in graph.astream(
             start,
             config=run_config(run_id),

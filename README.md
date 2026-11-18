@@ -106,6 +106,16 @@ The desk answers at https://localhost:8443 (curl --cacert ops/certs/ca.crt). Rel
 blue/green: `kubectl argo rollouts promote api`. `scripts/uptime_probe.py` counts failed
 requests during a release (Lab 90).
 
+## The Sovereign Enterprise Brain (Labs 97-100)
+
+A supervisor and three specialists (extraction, sanitization, analysis) in one graph
+(capstone/graph.py), with contracts in capstone/schemas.py (published in docs/brain_schemas.json).
+Start a run live with `scripts/brain_live.py`, decide with
+`POST /v1/brain/runs/{run_id}/decision` (another analyst or a lead), check the sealed record
+with `scripts/verify_brain.py <run_id>`, and fetch the signed compliance report with
+`scripts/compliance_report.py`. Tokens carry scopes (brain:run, brain:decide); runs have a
+budget (SB_BRAIN_RUN_LIMIT) and a step limit (SB_BRAIN_RECURSION_LIMIT).
+
 ## Graph diagram (Lab 27)
 
 The research graph's diagram lives in docs/research_graph.md (GitHub draws it).

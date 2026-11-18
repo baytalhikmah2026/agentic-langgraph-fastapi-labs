@@ -1,4 +1,4 @@
-"""The Compliance Sentinel (Lab 95): controls are met or flagged from the evidence alone."""
+"""The Compliance Sentinel (Labs 95, 100): controls are met or flagged from the evidence alone."""
 
 import json
 from dataclasses import dataclass, replace
@@ -60,3 +60,17 @@ def test_self_approval_and_tampering_are_flagged() -> None:
     report = controls(build_report(events, POSTURE, days=30))
     assert report["EU AI Act, Article 14"]["evidence"]["four_eyes_breaches"] == ["a1"]
     assert report["EU AI Act, Article 14"]["met"] is False
+
+
+def test_a_self_approved_brain_run_is_flagged() -> None:
+    """Lab 100: Brain decisions carry their requester in the sealed details."""
+    details = json.dumps({"requested_by": "amina"})
+    at = datetime.now(UTC).isoformat(timespec="microseconds")
+    digest = entry_hash(GENESIS, at, "amina", "brain.approved", "r1", details)
+    events = [Event(1, at, "amina", "brain.approved", "r1", details, GENESIS, digest)]
+
+    article_14 = controls(build_report(events, POSTURE, days=30))["EU AI Act, Article 14"]
+
+    assert article_14["evidence"]["decisions"] == 1
+    assert article_14["evidence"]["four_eyes_breaches"] == ["r1"]
+

@@ -38,6 +38,9 @@ MODEL_TOKENS = Counter(
 INJECTIONS_BLOCKED = Counter(
     "sb_injections_blocked", "Texts stopped by the injection guard (Lab 71), by door", ["door"]
 )
+BRAIN_RUNS = Counter(
+    "sb_brain_runs", "Sovereign Brain runs (Lab 100), by how far they got", ["outcome"]
+)
 APPROVAL_ACTIONS = Counter(
     "sb_approval_actions",
     "What people did with waiting reports (approved, rejected, sent_back, override_edit ...)",
