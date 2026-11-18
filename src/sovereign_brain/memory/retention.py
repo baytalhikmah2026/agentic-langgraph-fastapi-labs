@@ -54,6 +54,12 @@ class ThreadRegistry:
                 await session.delete(thread)
                 await session.commit()
 
+    async def keys_for_client(self, client_id: str) -> list[str]:
+        """Keys of every thread about one client, for every analyst (Lab 78: erasure)."""
+        query = select(ResearchThread.key).where(ResearchThread.client_id == client_id)
+        async with self.sessions() as session:
+            return list((await session.scalars(query)).all())
+
     async def unused_since(self, cutoff: datetime) -> list[str]:
         """Keys of the threads not used since the cutoff time."""
         query = select(ResearchThread.key).where(ResearchThread.last_used_at < cutoff)

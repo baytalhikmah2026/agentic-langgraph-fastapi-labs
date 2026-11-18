@@ -26,6 +26,11 @@ class ResearchCache:
         text = f"{client_id}|{' '.join(question.lower().split())}"
         return "research:v2:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def client_index(client_id: str) -> str:
+        """A set of every cached key about one client (Lab 78), so they can all be erased."""
+        return f"research:v2:client:{client_id}"
+
     async def get(self, client_id: str, question: str) -> dict | None:
         try:
             value = await self.client.get(self.key(client_id, question))
@@ -37,9 +42,23 @@ class ResearchCache:
     async def set(self, client_id: str, question: str, result: dict) -> None:
         value = json.dumps(result)
         try:
-            await self.client.set(self.key(client_id, question), value, ex=self.ttl_seconds)
+            key = self.key(client_id, question)
+            await self.client.set(key, value, ex=self.ttl_seconds)
+            await self.client.sadd(self.client_index(client_id), key)  # Lab 78
+            await self.client.expire(self.client_index(client_id), self.ttl_seconds)
         except RedisError as error:
             logger.warning("Cache not available, answer not stored: %r", error)
+
+    async def forget_client(self, client_id: str) -> int:
+        """Delete every cached answer about one client (Lab 78); returns how many.
+
+        No "cache not available" fallback here: an erasure must not quietly half-succeed.
+        """
+        index = self.client_index(client_id)
+        keys = await self.client.smembers(index)
+        removed = await self.client.delete(*keys) if keys else 0
+        await self.client.delete(index)
+        return removed
 
 
 def get_cache(request: Request) -> ResearchCache:

@@ -51,3 +51,18 @@ async def test_an_unrelated_question_finds_nothing(
     await memory.remember(record("amina", "What is a bond?", "A bond is a loan to a company."))
 
     assert await memory.recall("amina", "C-1042", "What is the energy exposure?") == []
+
+
+async def test_an_erasure_forgets_one_client_only(
+    make_memory: Callable[[], SemanticMemory],
+) -> None:
+    memory = make_memory()
+    await memory.remember(record("amina", "Energy exposure?", "Energy is 18.5%."))
+    await memory.remember(record("omar", "Bond holdings?", "Bonds are 30%."))
+    await memory.remember(record("amina", "Energy exposure?", "Energy is 10%.", "C-2077"))
+
+    removed = await memory.forget_client("C-1042")
+
+    assert removed == 2  # both analysts' memories about C-1042
+    assert await memory.recall("amina", "C-1042", "Energy exposure?") == []
+    assert len(await memory.recall("amina", "C-2077", "Energy exposure?")) == 1

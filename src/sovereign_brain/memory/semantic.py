@@ -118,3 +118,17 @@ class SemanticMemory:
             with_payload=True,
         )
         return [Recollection(**point.payload, score=point.score) for point in response.points]
+
+    async def forget_client(self, client_id: str) -> int:
+        """Delete every memory about one client, for every analyst (Lab 78); returns how many."""
+        await self.ensure_collection()
+        about_client = models.Filter(
+            must=[
+                models.FieldCondition(key="client_id", match=models.MatchValue(value=client_id))
+            ]
+        )
+        found = await self.client.count(self.collection, count_filter=about_client, exact=True)
+        await self.client.delete(
+            self.collection, points_selector=models.FilterSelector(filter=about_client)
+        )
+        return found.count

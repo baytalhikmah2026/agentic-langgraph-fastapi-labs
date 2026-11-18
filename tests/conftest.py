@@ -173,15 +173,22 @@ def no_mcp_servers(monkeypatch: pytest.MonkeyPatch) -> None:
 def in_memory_cache(monkeypatch: pytest.MonkeyPatch) -> dict[str, dict]:
     """Tests never need Redis: the cache keeps its answers in a dictionary instead."""
     store: dict[str, dict] = {}
+    by_client: dict[str, set[str]] = {}  # the per-client index (Lab 78)
 
     async def get(self: ResearchCache, client_id: str, question: str) -> dict | None:
         return store.get(self.key(client_id, question))
 
-    async def set(self: ResearchCache, client_id: str, question: str, result: dict) -> None:
+    async def put(self: ResearchCache, client_id: str, question: str, result: dict) -> None:
         store[self.key(client_id, question)] = result
+        by_client.setdefault(client_id, set()).add(self.key(client_id, question))
+
+    async def forget_client(self: ResearchCache, client_id: str) -> int:
+        keys = by_client.pop(client_id, set())
+        return sum(store.pop(key, None) is not None for key in keys)
 
     monkeypatch.setattr(ResearchCache, "get", get)
-    monkeypatch.setattr(ResearchCache, "set", set)
+    monkeypatch.setattr(ResearchCache, "set", put)  # "put": the name set() stays the built-in
+    monkeypatch.setattr(ResearchCache, "forget_client", forget_client)
     return store
 
 
