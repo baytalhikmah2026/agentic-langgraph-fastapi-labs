@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import uuid4
@@ -27,6 +27,7 @@ from sovereign_brain.memory.threads import thread_config, thread_key
 from sovereign_brain.observability.metrics import INJECTIONS_BLOCKED
 from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
 from sovereign_brain.security.injection import BLOCKED_QUESTION, injection_rules
+from sovereign_brain.security.pii import get_masker, unmask
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.errors import error_reports
 
@@ -108,6 +109,7 @@ class CheckedRequest:
     graph_input: dict
     thread_id: str  # what the analyst sees and sends back for a follow-up (Lab 31)
     thread_key: str  # what the checkpointer stores: "<username>:<thread_id>"
+    vault: dict[str, str] = field(default_factory=dict)  # placeholder -> real value (Lab 72)
 
 
 async def check_request(
@@ -122,10 +124,17 @@ async def check_request(
     if client is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Client {body.client_id} not found")
     profile = f"{client.name}, {client.segment}, risk profile {client.risk_profile}"
+    question, vault = body.question, {}
+    if get_settings().pii_masking:  # the model only sees placeholders (Lab 72)
+        masker = get_masker()
+        question = masker.mask(question, vault)
+        profile = masker.mask(profile, vault)
+        if vault:
+            logger.info("Masked %d personal values: %s", len(vault), sorted(vault))
     graph_input = {
         "client_id": body.client_id,
         "client_profile": profile,
-        "question": body.question,
+        "question": question,
     }
     thread_id = body.thread_id or uuid4().hex  # no thread given: a new conversation
     return CheckedRequest(
@@ -133,6 +142,7 @@ async def check_request(
         graph_input=graph_input,
         thread_id=thread_id,
         thread_key=thread_key(user.username, thread_id),
+        vault=vault,
     )
 
 
@@ -186,7 +196,7 @@ async def submit_research(
         request_id=get_request_id(),
         client_id=client_id,
         status="completed",
-        summary=result["answer"],
+        summary=unmask(result["answer"], checked.vault),  # real values for the analyst
         route=result["route"],
         checked=result.get("checked"),
         thread_id=None if cached else checked.thread_id,  # a cached answer has no thread
@@ -213,7 +223,7 @@ async def trace_research(
     return ResearchTrace(
         request_id=get_request_id(),
         client_id=client_id,
-        summary=result["answer"],
+        summary=unmask(result["answer"], checked.vault),
         route=result["route"],
         checked=result.get("checked"),
         thread_id=checked.thread_id,

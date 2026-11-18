@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     otel_enabled: bool = False
     otel_endpoint: str = "http://localhost:4318"
     otel_service_name: str = "sovereign-brain-api"
+    # Personal data (Lab 72): mask it in research questions before the model reads them
+    pii_masking: bool = True
     # Grafana alerts (Lab 69): the token Grafana sends to POST /v1/ops/alerts
     alert_webhook_token: SecretStr = SecretStr("local-alert-token-change-me")
 

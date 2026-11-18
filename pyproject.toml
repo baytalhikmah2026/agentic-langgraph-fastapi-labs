@@ -5,6 +5,7 @@ description = "The AI Research Desk of Crescent Ledger Bank: agents with LangGra
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "en-core-web-sm",
     "fastapi[standard]==0.162.4",
     "langchain==1.4.10",
     "langchain-core==1.7.7",
@@ -20,6 +21,7 @@ dependencies = [
     "opentelemetry-exporter-otlp==1.45.2",
     "opentelemetry-instrumentation-fastapi==0.66b2",
     "opentelemetry-sdk==1.45.2",
+    "presidio-analyzer==2.2.366",
     "prometheus-client==0.26.0",
     "psycopg[binary,pool]==3.3.8",
     "pwdlib[argon2]==0.3.1",
@@ -29,6 +31,7 @@ dependencies = [
     "qdrant-client==1.20.0",
     "redis==8.1.0",
     "slowapi==0.1.10",
+    "spacy==3.8.18",
     "sqlalchemy[asyncio]==2.1.8",
 ]
 
@@ -50,6 +53,9 @@ select = ["E", "F", "I", "UP", "B"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 [dependency-groups]
 dev = [
