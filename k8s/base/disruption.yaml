@@ -1,0 +1,11 @@
+# Planned interruptions (Lab 90): when Kubernetes empties a node on purpose (maintenance,
+# upgrades), it must always leave at least one API pod running
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api

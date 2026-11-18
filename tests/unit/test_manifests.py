@@ -1,4 +1,4 @@
-"""The Kubernetes manifests (Labs 82-89): rules every workload in k8s/base follows."""
+"""The Kubernetes manifests (Labs 82-90): rules every workload in k8s/base follows."""
 
 import tomllib
 from pathlib import Path
@@ -125,3 +125,11 @@ def test_the_api_is_released_blue_green_by_a_person() -> None:
     kustomization = yaml.safe_load((BASE / "kustomization.yaml").read_text(encoding="utf-8"))
     transform = (BASE / kustomization["configurations"][0]).read_text(encoding="utf-8")
     assert "envFrom/configMapRef/name" in transform
+
+
+def test_planned_interruptions_always_leave_an_api_pod() -> None:
+    (budget,) = [doc for doc in documents() if doc["kind"] == "PodDisruptionBudget"]
+    (rollout,) = [doc for doc in documents() if doc["kind"] == "Rollout"]
+
+    assert budget["spec"]["minAvailable"] >= 1
+    assert budget["spec"]["selector"] == rollout["spec"]["selector"]

@@ -85,6 +85,27 @@ workspace MCP server, and a reviewer runs the file with the check in the sandbox
 until it prints PASS or the rounds run out (SB_MAX_REVISIONS). Only the developer can write
 to the workspace: its MCP server is not on the shared tool wall (SB_AGENCY_MCP_SERVERS).
 
+## Kubernetes (Module 9)
+
+The desk also runs on a local kind cluster. On a new cluster, in this order:
+
+    kind create cluster --config k8s/kind-config.yaml
+    # add-ons: metrics-server + its kind patch, KEDA (Lab 83), Traefik (Lab 87), Argo Rollouts (Lab 89)
+    docker build -t sovereign-brain-api:0.2.0 .
+    kind load docker-image sovereign-brain-api:0.2.0 --name sovereign
+    uv run python scripts/make_certs.py          # only if ops/certs is empty (Lab 74)
+    kubectl apply -k k8s/overlays/local          # pods wait for their Secrets
+    uv run python scripts/k8s_secrets.py
+    uv run python scripts/issue_cert.py desk localhost desk.localhost
+    kubectl -n sovereign-brain create secret tls desk-tls --cert ops/certs/desk.crt --key ops/certs/desk.key
+    kubectl -n sovereign-brain exec deploy/ollama -- ollama pull qwen3:4b
+    kubectl -n sovereign-brain exec deploy/ollama -- ollama pull nomic-embed-text:v1.5
+    kubectl -n sovereign-brain exec -it svc/api -- python scripts/create_user.py amina --full-name "Amina Rahman"
+
+The desk answers at https://localhost:8443 (curl --cacert ops/certs/ca.crt). Releases are
+blue/green: `kubectl argo rollouts promote api`. `scripts/uptime_probe.py` counts failed
+requests during a release (Lab 90).
+
 ## Graph diagram (Lab 27)
 
 The research graph's diagram lives in docs/research_graph.md (GitHub draws it).
