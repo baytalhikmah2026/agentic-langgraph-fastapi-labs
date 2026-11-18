@@ -1,5 +1,6 @@
 """Passwords, sign-in tokens and the current user."""
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -39,9 +40,10 @@ def not_authenticated(message: str) -> HTTPException:
     )
 
 
-async def get_current_user(
-    request: Request, token: Annotated[str, Depends(oauth2_scheme)], users: Users
+async def user_from_token(
+    token: str, find_user: Callable[[str], Awaitable[User | None]]
 ) -> User:
+    """The user a sign-in token belongs to, or a 401 (Lab 98: shared with the WebSocket)."""
     settings = get_settings()
     try:
         claims = jwt.decode(
@@ -52,11 +54,18 @@ async def get_current_user(
     except jwt.InvalidTokenError as error:
         raise not_authenticated("The sign-in token is not valid") from error
 
-    user = await users.get(claims.get("sub", ""))
+    user = await find_user(claims.get("sub", ""))
     if user is None or user.disabled:
         raise not_authenticated("Unknown or disabled user")
     if claims.get("role") != user.role:  # Lab 73: a changed role needs a new sign-in
         raise not_authenticated("Your role has changed; please sign in again")
+    return user
+
+
+async def get_current_user(
+    request: Request, token: Annotated[str, Depends(oauth2_scheme)], users: Users
+) -> User:
+    user = await user_from_token(token, users.get)
     request.state.username = user.username
     return user
 

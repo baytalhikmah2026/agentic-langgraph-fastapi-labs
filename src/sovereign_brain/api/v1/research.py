@@ -8,6 +8,7 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
+from fastapi.requests import HTTPConnection
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from langchain_core.messages import AIMessageChunk
 from langgraph.graph.state import CompiledStateGraph
@@ -56,9 +57,12 @@ def get_research_graph(request: Request) -> CompiledStateGraph:
 ResearchGraph = Annotated[CompiledStateGraph, Depends(get_research_graph)]
 
 
-def get_portfolio(request: Request) -> PortfolioService:
-    """The portfolio service created at start-up (see lifespan in main.py)."""
-    return request.app.state.portfolio
+def get_portfolio(connection: HTTPConnection) -> PortfolioService:
+    """The portfolio service created at start-up (see lifespan in main.py).
+
+    Lab 98: HTTPConnection, so WebSocket routes can use it too.
+    """
+    return connection.app.state.portfolio
 
 
 def get_memory(request: Request) -> SemanticMemory | None:

@@ -19,6 +19,7 @@ from sovereign_brain.api.v1 import (
     assistant,
     audit,
     auth,
+    brain,
     cases,
     clients,
     compliance,
@@ -35,6 +36,7 @@ from sovereign_brain.api.v1 import (
     threads,
     tools,
 )
+from sovereign_brain.capstone.graph import build_brain_graph
 from sovereign_brain.core.cache import ResearchCache
 from sovereign_brain.core.errors import register_exception_handlers
 from sovereign_brain.core.logging import configure_logging
@@ -133,6 +135,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.mapreduce_graph = build_mapreduce_graph(
             model, chunk_chars=settings.map_chunk_chars, collapse_chars=settings.map_collapse_chars
         )
+        # The Sovereign Enterprise Brain (Lab 98): its runs are saved like the approvals
+        app.state.brain_graph = build_brain_graph(model, checkpointer=checkpointer)
         # The software agency (Lab 60): PM, developer (workspace MCP) and reviewer (sandbox)
         app.state.agency_graph = build_agency_graph(model, app.state.agency_tools)
         # Thread expiry (Lab 34): a background task that runs as long as the API runs
@@ -188,6 +192,7 @@ def create_app() -> FastAPI:
     app.include_router(privacy.router)
     app.include_router(security.router)
     app.include_router(compliance.router)  # Lab 95
+    app.include_router(brain.router)  # Lab 98
     return app
 
 
