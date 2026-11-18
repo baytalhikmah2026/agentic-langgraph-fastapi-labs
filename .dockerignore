@@ -10,3 +10,11 @@ reports
 backups
 data/audit
 ops/certs
+# Lab 81: what the running desk never needs
+tests
+requests
+docs
+locustfile.py
+compose*.yaml
+k8s
+.github

@@ -1,0 +1,48 @@
+# Production settings (Lab 81), layered on top of compose.yaml:
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+# Only what differs from development is written here; everything else comes from compose.yaml.
+
+services:
+  api:
+    image: sovereign-brain-api:0.1.0
+    # the production server: no reload, no file watching
+    command: ["fastapi", "run", "src/sovereign_brain/main.py", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      SB_ENVIRONMENT: production
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 3g
+    cpus: 2
+
+  market:
+    image: sovereign-brain-api:0.1.0
+    environment:
+      SB_ENVIRONMENT: production
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+
+  sandbox:
+    image: sovereign-brain-api:0.1.0
+    restart: unless-stopped
+
+  postgres:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+  qdrant:
+    restart: unless-stopped
+
+  ollama:
+    restart: unless-stopped
+
+  vault:
+    restart: unless-stopped

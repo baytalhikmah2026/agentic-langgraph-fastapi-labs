@@ -16,11 +16,15 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
 
 # Stage 2: the small image that runs the API, as a normal user
-FROM python:3.13.18-slim-trixie
+FROM python:3.13.18-slim-trixie AS runtime
+# Lab 81: the version and origin travel with the image, readable by any tool
+ARG APP_VERSION=0.1.0
+LABEL org.opencontainers.image.title="sovereign-brain-api"       org.opencontainers.image.version="$APP_VERSION"       org.opencontainers.image.vendor="Crescent Ledger Bank (lab)"       org.opencontainers.image.source="https://github.com/baytalhikmah2026/agentic-langgraph-fastapi-labs"
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home app
 COPY --from=builder --chown=app:app /app /app
-ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+# Production unless told otherwise (Compose for development sets SB_ENVIRONMENT=local in .env)
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 SB_ENVIRONMENT=production
 WORKDIR /app
 USER app
 EXPOSE 8000
