@@ -15,12 +15,14 @@ from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.models import Approval, User
 from sovereign_brain.db.repository import Approvals, Clients
+from sovereign_brain.graphs.report import report_problems
 from sovereign_brain.graphs.trail import mark
 from sovereign_brain.schemas.approvals import (
     ApprovalStatus,
     ApprovalSummary,
     Decision,
     Feedback,
+    Override,
 )
 
 router = APIRouter(
@@ -70,6 +72,7 @@ def approval_status(approval_id: str, snapshot: StateSnapshot) -> ApprovalStatus
         checked=values.get("checked"),
         delivered=values.get("delivered"),
         feedback=values.get("feedback", []),
+        overridden_by=values.get("overridden_by"),
         trail=values.get("trail", []),
     )
 
@@ -149,7 +152,7 @@ async def continue_run(
 async def waiting_record(
     approval_id: str, user: User, approvals: Approvals, graph: CompiledStateGraph
 ) -> Approval:
-    """The gates of every decision (Labs 63-64): registered, waiting, and not your own."""
+    """The gates of every decision (Labs 63-65): registered, waiting, and not your own."""
     current = await saved_status(approval_id, graph)
     record = await approvals.get(approval_id)
     if record is None:
@@ -159,6 +162,9 @@ async def waiting_record(
         raise HTTPException(status.HTTP_409_CONFLICT, detail)
     if record.requested_by == user.username:  # the four-eyes rule
         detail = "You requested this report; a second person must decide"
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
+    if current.overridden_by == user.username:  # nobody clears their own changes (Lab 65)
+        detail = "You changed this report; another person must decide"
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
     return record
 
@@ -206,4 +212,36 @@ async def send_back(
     await graph.aupdate_state(config, update, as_node="check")
     await graph.ainvoke(None, config=config, context=context)  # new draft, check, hold line
     logger.info("Approval %s sent back by %s", approval_id, user.username)
+    return await saved_status(approval_id, graph)
+
+
+@router.post("/{approval_id}/override")
+async def override(
+    approval_id: ApprovalId,
+    change: Override,
+    user: CurrentUser,
+    approvals: Approvals,
+    graph: ApprovalGraph,
+    context: RunContext,
+) -> ApprovalStatus:
+    """A desk lead changes the run's course: their own report, or the plain fallback (Lab 65)."""
+    if user.role != "lead":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a desk lead can override a report")
+    await waiting_record(approval_id, user, approvals, graph)
+    config = approval_config(approval_id)
+    note = f"Overridden by {user.username} ({change.mode}): {change.reason}"
+    update = {"overridden_by": user.username, "trail": mark("check", note)}
+    if change.mode == "edit":
+        facts = (await graph.aget_state(config)).values["facts"]
+        problems = report_problems(change.report, facts)  # the same rules as for the model
+        if problems:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, problems)
+        update |= {"report": change.report.model_dump(), "checked": True, "verdict": "done"}
+    else:
+        update |= {"verdict": "fallback"}
+    # Written as check: its verdict is the switch on the tracks (done -> deliver, fallback)
+    await graph.aupdate_state(config, update, as_node="check")
+    if change.mode == "fallback":
+        await graph.ainvoke(None, config=config, context=context)  # fallback, then hold line
+    logger.info("Approval %s overridden by %s (%s)", approval_id, user.username, change.mode)
     return await saved_status(approval_id, graph)

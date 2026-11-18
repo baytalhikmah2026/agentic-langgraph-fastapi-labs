@@ -1,9 +1,9 @@
 """Reports waiting for a person (Module 7): what the approval endpoints return."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from sovereign_brain.schemas.report import ResearchReport
 from sovereign_brain.schemas.research import TrailStep
@@ -22,6 +22,7 @@ class ApprovalStatus(BaseModel):
     checked: bool | None
     delivered: str | None
     feedback: list[str]  # reviewer notes the desk has received (Lab 64)
+    overridden_by: str | None  # the desk lead who changed the run, if anyone (Lab 65)
     trail: list[TrailStep]
 
 
@@ -45,3 +46,17 @@ class Feedback(BaseModel):
     """A reviewer's note for the desk: what to change in the next draft (Lab 64)."""
 
     comment: str = Field(min_length=3, max_length=500)
+
+
+class Override(BaseModel):
+    """A desk lead's override (Lab 65): their own report, or the plain fallback report."""
+
+    mode: Literal["edit", "fallback"]
+    report: ResearchReport | None = None  # the edited report, needed for "edit"
+    reason: str = Field(min_length=3, max_length=500)
+
+    @model_validator(mode="after")
+    def edit_needs_a_report(self) -> Self:
+        if self.mode == "edit" and self.report is None:
+            raise ValueError("an edit needs the edited report")
+        return self

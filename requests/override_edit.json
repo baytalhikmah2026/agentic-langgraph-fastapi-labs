@@ -1,0 +1,15 @@
+{
+  "mode": "edit",
+  "reason": "Make the advice clear for the client.",
+  "report": {
+    "client_id": "C-1042",
+    "headline": "Financials and Government Bonds each hold 30.0% of the portfolio: a medium concentration.",
+    "largest_sector": "Financials",
+    "largest_sector_percent": 30.0,
+    "risk_level": "medium",
+    "key_points": [
+      "Medina Bank is worth 300000 USD.",
+      "Energy holdings total 185000 USD."
+    ]
+  }
+}

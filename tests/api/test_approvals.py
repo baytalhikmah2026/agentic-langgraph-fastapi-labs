@@ -1,5 +1,6 @@
 """The approval endpoints (Module 7): reports wait for a person before they are sent."""
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -204,3 +205,104 @@ def test_the_requester_cannot_send_back_their_own_report(
     )
 
     assert response.status_code == 403
+
+
+def test_a_lead_edits_and_a_second_person_approves(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    omar_headers: dict[str, str],
+    layla_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    edited = {**GOOD, "headline": "Medina Bank is 81.5% of the portfolio: reduce it."}
+    change = {"mode": "edit", "report": edited, "reason": "Make the advice clear."}
+
+    overridden = client.post(
+        f"/v1/approvals/{approval_id}/override", json=change, headers=layla_headers
+    )
+    by_layla = client.post(
+        f"/v1/approvals/{approval_id}/decision", json={"action": "approve"}, headers=layla_headers
+    )
+    by_omar = client.post(
+        f"/v1/approvals/{approval_id}/decision", json={"action": "approve"}, headers=omar_headers
+    )
+
+    assert overridden.json()["status"] == "awaiting_approval"
+    assert overridden.json()["overridden_by"] == "layla"
+    assert by_layla.status_code == 403  # nobody clears their own changes
+    assert by_omar.json()["status"] == "delivered"
+    letter = json.loads((tmp_path / f"{approval_id}.json").read_text(encoding="utf-8"))
+    assert letter["report"] == edited
+
+
+def test_only_a_lead_can_override(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    omar_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    change = {"mode": "fallback", "reason": "I prefer the plain report."}
+
+    response = client.post(
+        f"/v1/approvals/{approval_id}/override", json=change, headers=omar_headers
+    )
+
+    assert response.status_code == 403
+
+
+def test_an_edited_report_must_match_the_facts(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    layla_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    change = {"mode": "edit", "report": {**GOOD, "largest_sector_percent": 80}, "reason": "Round"}
+
+    response = client.post(
+        f"/v1/approvals/{approval_id}/override", json=change, headers=layla_headers
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == ["largest_sector_percent must be 81.5"]
+
+
+def test_a_lead_switches_to_the_fallback_report(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    layla_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    change = {"mode": "fallback", "reason": "Use the plain wording for this client."}
+
+    response = client.post(
+        f"/v1/approvals/{approval_id}/override", json=change, headers=layla_headers
+    )
+
+    body = response.json()
+    assert body["status"] == "awaiting_approval"
+    assert body["checked"] is False  # the plain report is written by code, not checked
+    assert [step["node"] for step in body["trail"]][-2:] == ["check", "fallback"]

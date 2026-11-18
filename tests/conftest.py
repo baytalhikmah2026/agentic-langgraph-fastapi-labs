@@ -99,6 +99,8 @@ def seed_rows() -> list:
              hashed_password=PASSWORD_HASH, role="analyst", disabled=True),
         User(username="omar", full_name="Omar Siddiqui", hashed_password=PASSWORD_HASH,
              role="analyst", disabled=False),
+        User(username="layla", full_name="Layla Haddad", hashed_password=PASSWORD_HASH,
+             role="lead", disabled=False),
         Position(id=1, client_id="C-1042", ticker="GLFP", name="Gulf Petroleum Co",
                  sector="Energy", market_value_usd=120000),
         Position(id=2, client_id="C-1042", ticker="SNRS", name="Sunrise Solar",
@@ -245,3 +247,9 @@ def auth_headers(client: TestClient) -> dict[str, str]:
 def omar_headers(client: TestClient) -> dict[str, str]:
     """Signs in as omar, a second analyst (Lab 40)."""
     return sign_in(client, "omar")
+
+
+@pytest.fixture
+def layla_headers(client: TestClient) -> dict[str, str]:
+    """Signs in as layla, the desk lead (Lab 65)."""
+    return sign_in(client, "layla")

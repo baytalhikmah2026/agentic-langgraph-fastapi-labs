@@ -13,6 +13,8 @@ The graph stops just before it (interrupt_before) and waits, saved by the checkp
 a person releases it.
 Lab 64: a reviewer can send a waiting report back with a note. The note is kept in the state
 (feedback) and every later draft reads it.
+Lab 65: a desk lead can override a waiting run: replace the report with their own, or switch
+the run to the plain fallback report. Either way it returns to the hold line for approval.
 """
 
 import json
@@ -67,6 +69,7 @@ class ReportState(ReportInput):
     verdict: Literal["done", "retry", "fallback"]
     delivered: str  # where the approved report was sent (Lab 61)
     feedback: Annotated[list[str], operator.add]  # notes from human reviewers (Lab 64)
+    overridden_by: str  # the desk lead who changed the run's course (Lab 65)
     trail: Annotated[list[TrailEntry], operator.add]
 
 

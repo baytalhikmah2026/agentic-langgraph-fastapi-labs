@@ -1,4 +1,4 @@
-"""Human approval (Labs 61-64): pauses, rejection, and feedback that goes back to the desk."""
+"""Human approval (Labs 61-65): pauses, rejection, feedback and overrides."""
 
 import json
 from collections.abc import Callable
@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from sovereign_brain.graphs.context import ResearchContext
-from sovereign_brain.graphs.report import build_report_graph
+from sovereign_brain.graphs.report import build_report_graph, fallback_report, sector_facts
 from sovereign_brain.graphs.trail import mark, stations
 
 APPROVAL_ID = "4b7e1c9a2d5f4e3b8a6c0d1e2f3a4b5c"
@@ -133,3 +133,23 @@ async def test_feedback_sends_the_report_back_to_draft(
     assert redrafted.values["report"] == better
     assert redrafted.values["feedback"] == ["omar: Name the bank."]
     assert redrafted.values["attempts"] == 2
+
+
+async def test_a_fallback_override_changes_the_route(
+    make_model: Callable, tmp_path: Path
+) -> None:
+    graph = build_report_graph(
+        make_model([as_report(GOOD, "r1")]), checkpointer=InMemorySaver(), outbox=tmp_path
+    )
+    await graph.ainvoke(REQUEST, config=CONFIG, context=CONTEXT)
+
+    update = {"overridden_by": "layla", "verdict": "fallback"}
+    await graph.aupdate_state(CONFIG, update, as_node="check")  # the switch on the tracks
+    switched = await graph.aget_state(CONFIG)
+    await graph.ainvoke(None, config=CONFIG, context=CONTEXT)
+    after = await graph.aget_state(CONFIG)
+
+    plain = fallback_report("C-1042", sector_facts(await StubPortfolio().positions("C-1042")))
+    assert switched.next == ("fallback",)
+    assert after.next == ("deliver",)  # still waits for a person
+    assert after.values["report"] == plain.model_dump()
