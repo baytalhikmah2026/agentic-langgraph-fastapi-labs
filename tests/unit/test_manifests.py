@@ -1,4 +1,4 @@
-"""The Kubernetes manifests (Labs 82-83): rules every workload in k8s/base follows."""
+"""The Kubernetes manifests (Labs 82-84): rules every workload in k8s/base follows."""
 
 import tomllib
 from pathlib import Path
@@ -7,6 +7,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "k8s" / "base"
+SECRET_WORDS = ("PASSWORD", "SECRET", "TOKEN", "KEY")  # setting names that hint at a secret
 WORKLOADS = {"Deployment", "StatefulSet", "Job", "Rollout"}
 
 
@@ -53,3 +54,19 @@ def test_every_autoscaler_targets_a_workload_of_the_base() -> None:
     assert len(scalers) == 2  # the API's HPA (Lab 83) and the workers' ScaledObject
     for scaler in scalers:
         assert scaler["spec"]["scaleTargetRef"]["name"] in names
+
+
+def secret_like(name: str) -> bool:
+    return any(word in name for word in SECRET_WORDS)
+
+
+def test_no_secret_is_written_in_the_plan() -> None:
+    """Secret-looking settings hold only a file path, or come from a Secret (valueFrom)."""
+    for line in (BASE / "desk-config.env").read_text(encoding="utf-8").splitlines():
+        name, value = line.split("=", 1)
+        assert not secret_like(name) or value.startswith("/"), name
+    for workload in workloads():
+        for container in workload["spec"]["template"]["spec"]["containers"]:
+            for variable in container.get("env", []):
+                if secret_like(variable["name"]):
+                    assert "valueFrom" in variable or variable["value"].startswith("/")

@@ -20,7 +20,10 @@ spec:
             - name: POSTGRES_USER
               value: sb
             - name: POSTGRES_PASSWORD
-              value: sb_local_pw  # Lab 84 moves it into a Secret
+              valueFrom:  # Lab 84: from the Secret made by scripts/k8s_secrets.py
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
               value: sovereign_brain
           ports:

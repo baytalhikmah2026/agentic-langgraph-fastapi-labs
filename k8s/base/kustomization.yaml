@@ -11,7 +11,14 @@ resources:
   - redis.yaml
   - qdrant.yaml
   - ollama.yaml
+  - market.yaml
   - api.yaml
   - seed-job.yaml
   - research-worker.yaml
   - autoscaling.yaml
+# Lab 84: the everyday settings, shared by the API and the workers. The name gets a hash of the
+# content (desk-config-<hash>), so changing a value rolls the pods that use it automatically.
+configMapGenerator:
+  - name: desk-config
+    envs:
+      - desk-config.env

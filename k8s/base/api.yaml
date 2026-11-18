@@ -1,4 +1,5 @@
 # The Research Desk API (Lab 82): two copies of our own image behind one Service
+# Lab 84: everyday settings from the ConfigMap, secrets as files, market certificates as files
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,6 +18,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+        fsGroup: 10001  # mounted secret files belong to our group, so we can read them
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -25,27 +27,16 @@ spec:
           ports:
             - name: http
               containerPort: 8000
-          env:  # Lab 84 moves these into a ConfigMap and a Secret
-            - name: SB_ENVIRONMENT
-              value: production
-            - name: SB_LLM_MODEL
-              value: qwen3:4b
-            - name: SB_OLLAMA_BASE_URL
-              value: http://ollama:11434
-            - name: SB_DATABASE_URL
-              value: postgresql+psycopg://sb:sb_local_pw@postgres:5432/sovereign_brain
-            - name: SB_REDIS_URL
-              value: redis://redis:6379/0
-            - name: SB_RATE_LIMIT_STORAGE_URI
-              value: redis://redis:6379/1
-            - name: SB_CHECKPOINT_STORE
-              value: postgres
-            - name: SB_SHARED_STATE_STORE
-              value: redis
-            - name: SB_QDRANT_URL
-              value: http://qdrant:6333
-            - name: SB_MCP_SERVERS
-              value: '["desk", "notes"]'  # the market server joins in Lab 84
+          envFrom:
+            - configMapRef:
+                name: desk-config
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets/desk
+              readOnly: true
+            - name: market-certs
+              mountPath: /certs
+              readOnly: true
           resources:
             requests:
               cpu: 250m
@@ -57,6 +48,22 @@ spec:
             capabilities:
               drop:
                 - ALL
+      volumes:
+        - name: secrets
+          secret:
+            secretName: desk-secrets
+            defaultMode: 0440
+        - name: market-certs
+          secret:
+            secretName: market-tls
+            defaultMode: 0440
+            items:  # only the client side: the CA, our certificate and its key
+              - key: ca.crt
+                path: ca.crt
+              - key: api-client.crt
+                path: api-client.crt
+              - key: api-client.key
+                path: api-client.key
 ---
 apiVersion: v1
 kind: Service

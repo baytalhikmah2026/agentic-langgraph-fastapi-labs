@@ -22,7 +22,10 @@ spec:
           command: ["python", "scripts/seed_db.py"]
           env:
             - name: SB_DATABASE_URL
-              value: postgresql+psycopg://sb:sb_local_pw@postgres:5432/sovereign_brain
+              valueFrom:  # Lab 84: the address with its password, from the desk's Secret
+                secretKeyRef:
+                  name: desk-secrets
+                  key: SB_DATABASE_URL
           resources:
             requests:
               cpu: 100m

@@ -1,4 +1,5 @@
 # Research workers (Lab 83): take queued jobs from Redis; KEDA decides how many run (0 to 4)
+# Lab 84: the same ConfigMap, secrets and certificates as the API
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,27 +19,23 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: worker
           image: sovereign-brain-api:0.1.0
           command: ["python", "-m", "sovereign_brain.workers.research_worker"]
-          env:  # the same settings as the API; Lab 84 shares them through a ConfigMap
-            - name: SB_ENVIRONMENT
-              value: production
-            - name: SB_LLM_MODEL
-              value: qwen3:4b
-            - name: SB_OLLAMA_BASE_URL
-              value: http://ollama:11434
-            - name: SB_DATABASE_URL
-              value: postgresql+psycopg://sb:sb_local_pw@postgres:5432/sovereign_brain
-            - name: SB_REDIS_URL
-              value: redis://redis:6379/0
-            - name: SB_CHECKPOINT_STORE
-              value: postgres
-            - name: SB_MCP_SERVERS
-              value: '["desk", "notes"]'
+          envFrom:
+            - configMapRef:
+                name: desk-config
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets/desk
+              readOnly: true
+            - name: market-certs
+              mountPath: /certs
+              readOnly: true
           resources:
             requests:
               cpu: 200m
@@ -50,3 +47,19 @@ spec:
             capabilities:
               drop:
                 - ALL
+      volumes:
+        - name: secrets
+          secret:
+            secretName: desk-secrets
+            defaultMode: 0440
+        - name: market-certs
+          secret:
+            secretName: market-tls
+            defaultMode: 0440
+            items:
+              - key: ca.crt
+                path: ca.crt
+              - key: api-client.crt
+                path: api-client.crt
+              - key: api-client.key
+                path: api-client.key

@@ -1,5 +1,10 @@
-"""Application settings, read from environment variables that start with SB_."""
+"""Application settings, read from environment variables that start with SB_.
 
+Lab 84: in Kubernetes, secrets can also arrive as files, one per setting, in the folder named
+by SB_SECRETS_DIR (a mounted Secret). Environment variables still win over those files.
+"""
+
+import os
 from functools import lru_cache
 from typing import Literal
 
@@ -110,7 +115,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    settings = Settings()
+    # Lab 84: a folder of secret files (one per setting), when the cluster mounts one
+    settings = Settings(_secrets_dir=os.environ.get("SB_SECRETS_DIR") or None)
     if settings.vault_addr:  # Lab 75: the secrets come from Vault, not from .env
         from sovereign_brain.core.vault import with_vault_secrets  # here: avoids an import loop
 
