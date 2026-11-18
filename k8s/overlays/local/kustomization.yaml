@@ -1,0 +1,8 @@
+# Your own computer's harbour (Lab 82): the standard plan, with the image version you built
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: sovereign-brain-api
+    newTag: "0.1.0"

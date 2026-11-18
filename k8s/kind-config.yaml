@@ -1,0 +1,16 @@
+# The local Kubernetes cluster (Lab 82): one node called "sovereign", made with kind 0.33.0
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: sovereign
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.37.0
+    labels:
+      crescent-ledger.bank/residency: on-premises  # Lab 85: the bank's data stays on this node
+    extraPortMappings:
+      - containerPort: 30080  # Lab 87: the ingress (HTTP) reaches your computer on port 8080
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 30443  # Lab 87: the ingress (HTTPS) on port 8443
+        hostPort: 8443
+        protocol: TCP
