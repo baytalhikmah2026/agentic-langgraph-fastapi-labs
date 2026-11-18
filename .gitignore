@@ -36,3 +36,7 @@ ops/certs/
 # Lab 93: generated training data and model files (large, rebuilt from the scripts)
 edge/finetune/data/
 edge/finetune/*.gguf
+# Lab 96: Terraform downloads and local state never go into Git (the state lives in the cluster)
+infra/terraform/.terraform/
+*.tfstate
+*.tfstate.backup

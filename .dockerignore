@@ -20,3 +20,5 @@ k8s
 .github
 # Lab 93: training material never goes into the image
 edge
+# Lab 96: infrastructure code is not part of the image
+infra
