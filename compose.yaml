@@ -21,6 +21,8 @@ services:
       SB_QDRANT_URL: http://qdrant:6333
       SB_MARKET_API_URL: http://market:8100
       SB_SANDBOX_URL: http://sandbox:8200
+      SB_OTEL_ENABLED: "true"
+      SB_OTEL_ENDPOINT: http://otel-collector:4318
     depends_on:
       ollama:
         condition: service_healthy
@@ -34,6 +36,8 @@ services:
         condition: service_healthy
       sandbox:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks:
       - default
       - sandbox-net
@@ -149,6 +153,23 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  otel-collector:
+    # Tracing (Lab 66): receives the API's spans and passes them on to Jaeger
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    container_name: sb-otel-collector
+    command: ["--config=/etc/otelcol/collector.yaml"]
+    volumes:
+      - ./ops/otel/collector.yaml:/etc/otelcol/collector.yaml:ro
+    depends_on:
+      - jaeger
+
+  jaeger:
+    # Trace viewer (Lab 66): open http://localhost:16686
+    image: jaegertracing/jaeger:2.23.0
+    container_name: sb-jaeger
+    ports:
+      - "16686:16686"
 
   vllm:
     # Optional, NVIDIA GPU only: docker compose --profile gpu up -d vllm

@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     map_max_concurrency: int = 4
     # Approvals (Lab 61): released reports are sent here, one JSON file each
     outbox_dir: str = "data/outbox"
+    # Tracing (Lab 66): off by default; Compose switches it on for the API container
+    otel_enabled: bool = False
+    otel_endpoint: str = "http://localhost:4318"
+    otel_service_name: str = "sovereign-brain-api"
 
     # Database (Lab 12)
     database_url: str = "postgresql+psycopg://sb:sb_local_pw@localhost:5432/sovereign_brain"

@@ -52,6 +52,7 @@ from sovereign_brain.memory.retention import ThreadRegistry, cleanup_worker
 from sovereign_brain.memory.semantic import SemanticMemory
 from sovereign_brain.memory.shared_state import open_shared_store
 from sovereign_brain.memory.summaries import ThreadArchivist
+from sovereign_brain.observability.tracing import setup_tracing
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.mcp_host import load_mcp_tools
 
@@ -139,6 +140,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await qdrant.close()
     await redis_client.aclose()
     await engine.dispose()
+    if app.state.tracer_provider is not None:
+        app.state.tracer_provider.shutdown()  # send the last spans before stopping (Lab 66)
     logger.info("Shutting down %s", settings.app_name)
 
 
@@ -149,6 +152,7 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     register_exception_handlers(app)
     app.add_middleware(RequestIdMiddleware)
+    app.state.tracer_provider = setup_tracing(app, settings)  # Lab 66, if switched on
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(research.router)
