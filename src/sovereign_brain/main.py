@@ -62,6 +62,7 @@ from sovereign_brain.observability.tracing import setup_tracing
 from sovereign_brain.security.signing import Signer
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.mcp_host import load_mcp_tools
+from sovereign_brain.workers.research_queue import ResearchQueue
 
 logger = logging.getLogger("sovereign_brain")
 
@@ -74,6 +75,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.session_factory = async_sessionmaker(engine, expire_on_commit=False)
     redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.cache = ResearchCache(redis_client, settings.cache_ttl_seconds)
+    # Queued research (Lab 83): jobs wait in Redis until a worker takes them
+    app.state.research_queue = ResearchQueue(redis_client)
     # Services live on app.state and reach each run through its context (Lab 28)
     app.state.portfolio = PortfolioService(app.state.session_factory)
     app.state.thread_registry = ThreadRegistry(app.state.session_factory)

@@ -1,0 +1,41 @@
+# Elastic scaling (Lab 83)
+# 1. The API: 2 to 5 copies, so that their average CPU use stays around 70% of what they request
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# 2. The research workers: none while the queue is empty, one more for every 2 waiting jobs
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: research-worker
+spec:
+  scaleTargetRef:
+    name: research-worker
+  minReplicaCount: 0
+  maxReplicaCount: 4
+  pollingInterval: 5  # look at the queue every 5 seconds
+  cooldownPeriod: 120  # back to zero 2 minutes after the queue was last busy
+  triggers:
+    - type: redis
+      metadata:
+        address: redis.sovereign-brain.svc.cluster.local:6379
+        databaseIndex: "0"
+        listName: research:queue
+        listLength: "2"
+        activationListLength: "0"

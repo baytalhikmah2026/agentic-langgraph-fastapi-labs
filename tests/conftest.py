@@ -268,3 +268,49 @@ def layla_headers(client: TestClient) -> dict[str, str]:
 def yusuf_headers(client: TestClient) -> dict[str, str]:
     """Signs in as yusuf, the auditor (Lab 73)."""
     return sign_in(client, "yusuf")
+
+
+class FakeRedis:
+    """Just enough of Redis for the research queue (Lab 83), kept in dictionaries."""
+
+    def __init__(self) -> None:
+        self.hashes: dict[str, dict[str, str]] = {}
+        self.lists: dict[str, list[str]] = {}
+
+    async def hset(self, name: str, mapping: dict[str, str]) -> None:
+        self.hashes.setdefault(name, {}).update(mapping)
+
+    async def hget(self, name: str, key: str) -> str | None:
+        return self.hashes.get(name, {}).get(key)
+
+    async def hgetall(self, name: str) -> dict[str, str]:
+        return dict(self.hashes.get(name, {}))
+
+    async def expire(self, name: str, seconds: int) -> None:
+        pass  # nothing expires in the tests
+
+    async def lpush(self, name: str, value: str) -> None:
+        self.lists.setdefault(name, []).insert(0, value)
+
+    async def blmove(
+        self, source: str, target: str, timeout: int, src: str, dest: str
+    ) -> str | None:
+        waiting = self.lists.get(source, [])
+        if not waiting:
+            return None
+        value = waiting.pop()  # RIGHT: the oldest job
+        self.lists.setdefault(target, []).insert(0, value)  # LEFT
+        return value
+
+    async def lrem(self, name: str, count: int, value: str) -> None:
+        self.lists.get(name, []).remove(value)
+
+    async def llen(self, name: str) -> int:
+        return len(self.lists.get(name, []))
+
+
+@pytest.fixture
+def fake_redis() -> FakeRedis:
+    """An empty, in-memory stand-in for Redis (Lab 83)."""
+    return FakeRedis()
+

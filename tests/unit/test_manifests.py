@@ -1,4 +1,4 @@
-"""The Kubernetes manifests (Lab 82): rules every workload in k8s/base follows."""
+"""The Kubernetes manifests (Labs 82-83): rules every workload in k8s/base follows."""
 
 import tomllib
 from pathlib import Path
@@ -10,14 +10,19 @@ BASE = ROOT / "k8s" / "base"
 WORKLOADS = {"Deployment", "StatefulSet", "Job", "Rollout"}
 
 
-def workloads() -> list[dict]:
-    """Every object that runs containers, in the files the base kustomization lists."""
+def documents() -> list[dict]:
+    """Every object in the files the base kustomization lists."""
     kustomization = yaml.safe_load((BASE / "kustomization.yaml").read_text(encoding="utf-8"))
     found = []
     for name in kustomization["resources"]:
         text = (BASE / name).read_text(encoding="utf-8")
-        found += [doc for doc in yaml.safe_load_all(text) if doc and doc["kind"] in WORKLOADS]
+        found += [doc for doc in yaml.safe_load_all(text) if doc]
     return found
+
+
+def workloads() -> list[dict]:
+    """The objects that run containers."""
+    return [doc for doc in documents() if doc["kind"] in WORKLOADS]
 
 
 def test_every_container_asks_for_resources() -> None:
@@ -39,3 +44,12 @@ def test_our_image_runs_as_a_normal_user_with_the_project_version() -> None:
                 assert pod["securityContext"]["runAsNonRoot"] is True
                 assert container["securityContext"]["allowPrivilegeEscalation"] is False
     assert ours >= 2  # at least the API and the seed job
+
+
+def test_every_autoscaler_targets_a_workload_of_the_base() -> None:
+    names = {workload["metadata"]["name"] for workload in workloads()}
+    scalers = [d for d in documents() if d["kind"] in {"HorizontalPodAutoscaler", "ScaledObject"}]
+
+    assert len(scalers) == 2  # the API's HPA (Lab 83) and the workers' ScaledObject
+    for scaler in scalers:
+        assert scaler["spec"]["scaleTargetRef"]["name"] in names

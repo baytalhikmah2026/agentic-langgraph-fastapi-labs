@@ -13,3 +13,5 @@ resources:
   - ollama.yaml
   - api.yaml
   - seed-job.yaml
+  - research-worker.yaml
+  - autoscaling.yaml

@@ -1,0 +1,5 @@
+# metrics-server on kind (Lab 83): the kind node's kubelet uses a self-signed certificate,
+# so metrics-server is told to accept it. Only for a local learning cluster.
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --kubelet-insecure-tls

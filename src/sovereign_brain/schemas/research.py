@@ -59,3 +59,15 @@ class ResearchTrace(BaseModel):
     thread_id: str
     trail: list[TrailStep]
     created_at: datetime
+
+
+class ResearchJob(BaseModel):
+    """A queued research request and, once a worker has finished it, its answer (Lab 83)."""
+
+    job_id: str
+    status: Literal["queued", "running", "completed", "failed"]
+    client_id: str
+    thread_id: str
+    summary: str | None = None
+    route: Literal["general", "portfolio"] | None = None
+    error: str | None = None

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from langchain_core.messages import AIMessageChunk
 from langgraph.graph.state import CompiledStateGraph
@@ -25,12 +25,18 @@ from sovereign_brain.memory.summaries import ThreadArchivist
 from sovereign_brain.memory.retention import ThreadRegistry
 from sovereign_brain.memory.threads import thread_config, thread_key
 from sovereign_brain.observability.metrics import INJECTIONS_BLOCKED
-from sovereign_brain.schemas.research import ResearchRequest, ResearchResponse, ResearchTrace
+from sovereign_brain.schemas.research import (
+    ResearchJob,
+    ResearchRequest,
+    ResearchResponse,
+    ResearchTrace,
+)
 from sovereign_brain.security.injection import BLOCKED_QUESTION, injection_rules
 from sovereign_brain.security.pii import get_masker, unmask
 from sovereign_brain.security.rbac import allowed
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.errors import error_reports
+from sovereign_brain.workers.research_queue import ResearchQueue
 
 router = APIRouter(
     prefix="/v1/research", tags=["research"], dependencies=[Depends(get_current_user)]
@@ -286,3 +292,55 @@ async def stream_research(
         yield ServerSentEvent(event="error", data={"error": "model_unavailable"})
         return
     yield ServerSentEvent(event="done", data={"request_id": request_id})
+
+
+def get_research_queue(request: Request) -> ResearchQueue:
+    """The research queue created at start-up (Lab 83)."""
+    return request.app.state.research_queue
+
+
+Queue = Annotated[ResearchQueue, Depends(get_research_queue)]
+JobId = Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")]
+
+
+@router.post(
+    "/jobs", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(model_call_gate)]
+)
+async def queue_research(
+    checked: Checked, user: CurrentUser, queue: Queue, registry: Registry
+) -> ResearchJob:
+    """The same research, done later by a worker (Lab 83): the answer is a job ID, at once."""
+    job_id = uuid4().hex
+    client_id = checked.body.client_id
+    await registry.touch(checked.thread_key, user.username, checked.thread_id, client_id)
+    job = {
+        "username": user.username,
+        "role": user.role,
+        "thread_key": checked.thread_key,
+        "thread_id": checked.thread_id,
+        "graph_input": checked.graph_input,
+        "vault": checked.vault,  # kept with the job for one hour, to unmask the answer
+    }
+    await queue.enqueue(job_id, job)
+    logger.info("Research for %s queued as job %s", client_id, job_id)
+    return ResearchJob(
+        job_id=job_id, status="queued", client_id=client_id, thread_id=checked.thread_id
+    )
+
+
+@router.get("/jobs/{job_id}")
+async def research_job(job_id: JobId, user: CurrentUser, queue: Queue) -> ResearchJob:
+    """A queued job's status and, once a worker has finished it, the answer (Lab 83)."""
+    record = await queue.status(job_id)
+    if record is None or record["job"]["username"] != user.username:  # only your own jobs
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Job {job_id} not found")
+    job, result = record["job"], record["result"]
+    return ResearchJob(
+        job_id=job_id,
+        status=record["status"],
+        client_id=job["graph_input"]["client_id"],
+        thread_id=job["thread_id"],
+        summary=unmask(result["answer"], job["vault"]) if result else None,
+        route=result["route"] if result else None,
+        error=record["error"],
+    )

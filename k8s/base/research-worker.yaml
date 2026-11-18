@@ -1,0 +1,52 @@
+# Research workers (Lab 83): take queued jobs from Redis; KEDA decides how many run (0 to 4)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-worker
+spec:
+  # no "replicas" here: KEDA owns the number, and re-applying the plan must not reset it
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: research-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: research-worker
+    spec:
+      terminationGracePeriodSeconds: 300  # time to finish the current job before stopping
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: sovereign-brain-api:0.1.0
+          command: ["python", "-m", "sovereign_brain.workers.research_worker"]
+          env:  # the same settings as the API; Lab 84 shares them through a ConfigMap
+            - name: SB_ENVIRONMENT
+              value: production
+            - name: SB_LLM_MODEL
+              value: qwen3:4b
+            - name: SB_OLLAMA_BASE_URL
+              value: http://ollama:11434
+            - name: SB_DATABASE_URL
+              value: postgresql+psycopg://sb:sb_local_pw@postgres:5432/sovereign_brain
+            - name: SB_REDIS_URL
+              value: redis://redis:6379/0
+            - name: SB_CHECKPOINT_STORE
+              value: postgres
+            - name: SB_MCP_SERVERS
+              value: '["desk", "notes"]'
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1536Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
