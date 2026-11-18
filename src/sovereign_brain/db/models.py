@@ -88,3 +88,19 @@ class ApprovalSignature(Base):
     statement: Mapped[str] = mapped_column(Text)  # the signed JSON, exactly as signed
     signature: Mapped[str] = mapped_column(String(120))  # base64 of the Ed25519 signature
     signed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class AuditEvent(Base):
+    """One entry of the hash-chained audit log (Lab 77). Entries are only ever added."""
+
+    __tablename__ = "audit_events"
+
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[str] = mapped_column(String(32))  # UTC time as ISO text: part of the hash
+    actor: Mapped[str] = mapped_column(String(40))
+    action: Mapped[str] = mapped_column(String(40))
+    subject: Mapped[str] = mapped_column(String(64))  # what it is about, e.g. an approval_id
+    details: Mapped[str] = mapped_column(Text)  # JSON
+    # unique: two entries can never claim the same predecessor, so the chain cannot fork
+    prev_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    hash: Mapped[str] = mapped_column(String(64))

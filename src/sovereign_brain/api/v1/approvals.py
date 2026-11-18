@@ -15,7 +15,7 @@ from sovereign_brain.core.request_id import get_request_id
 from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.models import Approval, User
-from sovereign_brain.db.repository import Approvals, Clients
+from sovereign_brain.db.repository import Approvals, AuditLog, Clients
 from sovereign_brain.graphs.report import report_problems
 from sovereign_brain.graphs.trail import mark
 from sovereign_brain.observability.metrics import APPROVAL_ACTIONS
@@ -122,6 +122,7 @@ async def request_report(
     client_id: ClientId,
     clients: Clients,
     approvals: Approvals,
+    audit: AuditLog,
     user: CurrentUser,
     graph: ApprovalGraph,
     context: RunContext,
@@ -145,6 +146,7 @@ async def request_report(
         interrupt_after=[inspect] if inspect else None,  # only for this run (Lab 62)
     )
     await approvals.add(approval_id, client.id, requested_by=user.username)
+    await audit.append(user.username, "approval.requested", approval_id, {"client_id": client.id})
     logger.info("Report for %s waits for approval %s", client.id, approval_id)
     return await saved_status(approval_id, graph)
 
@@ -180,7 +182,11 @@ async def get_approval(approval_id: ApprovalId, graph: ApprovalGraph) -> Approva
     dependencies=[Depends(require("approvals:request")), Depends(model_call_gate)],
 )
 async def continue_run(
-    approval_id: ApprovalId, user: CurrentUser, graph: ApprovalGraph, context: RunContext
+    approval_id: ApprovalId,
+    user: CurrentUser,
+    audit: AuditLog,
+    graph: ApprovalGraph,
+    context: RunContext,
 ) -> ApprovalStatus:
     """Let a run that paused for inspection carry on to its next hold line (Lab 62)."""
     current = await saved_status(approval_id, graph)
@@ -189,6 +195,7 @@ async def continue_run(
         raise HTTPException(status.HTTP_409_CONFLICT, detail)
     config = approval_config(approval_id, actor=user.username)
     await graph.ainvoke(None, config=config, context=context)
+    await audit.append(user.username, "approval.continued", approval_id, {})
     return await saved_status(approval_id, graph)
 
 
@@ -218,6 +225,7 @@ async def decide(
     decision: Decision,
     user: CurrentUser,
     approvals: Approvals,
+    audit: AuditLog,
     graph: ApprovalGraph,
     context: RunContext,
     signer: DeskSigner,
@@ -250,6 +258,8 @@ async def decide(
         "key_id": signer.key_id,
     }
     await approvals.add_signature(approval_id, statement, signer.sign(statement))
+    details = {"comment": decision.comment, "report_sha256": statement["report_sha256"]}
+    await audit.append(user.username, f"approval.{outcome}", approval_id, details)
     return final
 
 
@@ -262,6 +272,7 @@ async def send_back(
     feedback: Feedback,
     user: CurrentUser,
     approvals: Approvals,
+    audit: AuditLog,
     graph: ApprovalGraph,
     context: RunContext,
 ) -> ApprovalStatus:
@@ -275,6 +286,9 @@ async def send_back(
     await graph.aupdate_state(config, update, as_node="check")
     await graph.ainvoke(None, config=config, context=context)  # new draft, check, hold line
     APPROVAL_ACTIONS.labels("sent_back").inc()  # Lab 68
+    await audit.append(
+        user.username, "approval.sent_back", approval_id, {"comment": feedback.comment}
+    )
     logger.info("Approval %s sent back by %s", approval_id, user.username)
     return await saved_status(approval_id, graph)
 
@@ -285,6 +299,7 @@ async def override(
     change: Override,
     user: CurrentUser,
     approvals: Approvals,
+    audit: AuditLog,
     graph: ApprovalGraph,
     context: RunContext,
 ) -> ApprovalStatus:
@@ -306,6 +321,8 @@ async def override(
     if change.mode == "fallback":
         await graph.ainvoke(None, config=config, context=context)  # fallback, then hold line
     APPROVAL_ACTIONS.labels(f"override_{change.mode}").inc()  # Lab 68
+    details = {"mode": change.mode, "reason": change.reason}
+    await audit.append(user.username, f"approval.override_{change.mode}", approval_id, details)
     logger.info("Approval %s overridden by %s (%s)", approval_id, user.username, change.mode)
     return await saved_status(approval_id, graph)
 

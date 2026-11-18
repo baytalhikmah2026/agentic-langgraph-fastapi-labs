@@ -21,6 +21,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "approvals:decide": frozenset({"analyst", "lead"}),
     "approvals:override": frozenset({"lead"}),
     "approvals:read": frozenset({"analyst", "lead", "auditor"}),
+    "audit:read": frozenset({"lead", "auditor"}),  # Lab 77
 }
 
 

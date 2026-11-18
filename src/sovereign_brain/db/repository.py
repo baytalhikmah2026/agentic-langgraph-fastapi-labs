@@ -6,9 +6,11 @@ from typing import Annotated
 
 from fastapi import Depends
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
-from sovereign_brain.db.models import Approval, ApprovalSignature, Client, User
+from sovereign_brain.db.models import Approval, ApprovalSignature, AuditEvent, Client, User
 from sovereign_brain.db.session import DbSession
+from sovereign_brain.security.audit_chain import GENESIS, entry_hash
 
 
 class ClientRepository:
@@ -87,3 +89,46 @@ class ApprovalRepository:
 
 
 Approvals = Annotated[ApprovalRepository, Depends(ApprovalRepository)]
+
+
+class AuditRepository:
+    """The hash-chained audit log (Lab 77): append an entry, read them all in order."""
+
+    def __init__(self, session: DbSession) -> None:
+        self.session = session
+
+    async def append(self, actor: str, action: str, subject: str, details: dict) -> AuditEvent:
+        """Add one entry linked to the newest one; retried if another entry won the race."""
+        for _ in range(3):
+            last = await self.session.scalar(
+                select(AuditEvent).order_by(AuditEvent.seq.desc()).limit(1)
+            )
+            prev_hash = last.hash if last else GENESIS
+            at = datetime.now(UTC).isoformat(timespec="microseconds")
+            text = json.dumps(details, sort_keys=True)
+            event = AuditEvent(
+                at=at,
+                actor=actor,
+                action=action,
+                subject=subject,
+                details=text,
+                prev_hash=prev_hash,
+                hash=entry_hash(prev_hash, at, actor, action, subject, text),
+            )
+            self.session.add(event)
+            try:
+                await self.session.commit()
+                return event
+            except IntegrityError:  # someone else linked to the same entry first
+                await self.session.rollback()
+        raise RuntimeError("The audit log is busy; please try again")
+
+    async def events(self, limit: int | None = None) -> list[AuditEvent]:
+        """All entries, oldest first (or only the newest `limit`, still oldest first)."""
+        query = select(AuditEvent).order_by(AuditEvent.seq.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        return list(reversed(list(await self.session.scalars(query))))
+
+
+AuditLog = Annotated[AuditRepository, Depends(AuditRepository)]

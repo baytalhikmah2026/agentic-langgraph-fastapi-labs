@@ -17,6 +17,7 @@ from sovereign_brain.api.v1 import (
     agency,
     approvals,
     assistant,
+    audit,
     auth,
     cases,
     clients,
@@ -175,6 +176,7 @@ def create_app() -> FastAPI:
     app.include_router(agency.router)
     app.include_router(approvals.router)
     app.include_router(ops.router)
+    app.include_router(audit.router)
     return app
 
 

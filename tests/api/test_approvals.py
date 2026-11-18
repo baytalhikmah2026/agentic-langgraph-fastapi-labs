@@ -420,3 +420,33 @@ def test_a_decision_is_signed_and_can_be_checked(
     assert verify(statement, signed["signature"], key["public_key_pem"])
     forged = {**statement, "decided_by": "amina"}
     assert not verify(forged, signed["signature"], key["public_key_pem"])
+
+
+def test_every_action_lands_in_the_audit_chain(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    omar_headers: dict[str, str],
+    yusuf_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    client.post(
+        f"/v1/approvals/{approval_id}/decision", json={"action": "reject"}, headers=omar_headers
+    )
+
+    entries = client.get("/v1/audit/events", headers=yusuf_headers).json()
+    check = client.get("/v1/audit/verify", headers=yusuf_headers).json()
+    analyst = client.get("/v1/audit/verify", headers=auth_headers)
+
+    assert [(e["actor"], e["action"]) for e in entries] == [
+        ("amina", "approval.requested"),
+        ("omar", "approval.rejected"),
+    ]
+    assert (check["events"], check["valid"], check["problems"]) == (2, True, [])
+    assert check["head_hash"] == entries[-1]["hash"]
+    assert analyst.status_code == 403  # analysts may not read the audit log
