@@ -36,6 +36,13 @@ spec:
             - name: market-certs
               mountPath: /certs
               readOnly: true
+          livenessProbe:  # Lab 86: the heartbeat file must be fresh (see workers/heartbeat.py)
+            exec:
+              command: ["python", "-m", "sovereign_brain.workers.heartbeat"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
               cpu: 200m

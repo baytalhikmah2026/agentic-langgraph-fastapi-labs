@@ -1,4 +1,4 @@
-"""The Kubernetes manifests (Labs 82-85): rules every workload in k8s/base follows."""
+"""The Kubernetes manifests (Labs 82-86): rules every workload in k8s/base follows."""
 
 import tomllib
 from pathlib import Path
@@ -84,3 +84,20 @@ def test_data_services_keep_their_data_on_the_bank_node() -> None:
         assert spec["persistentVolumeClaimRetentionPolicy"]["whenDeleted"] == "Retain"
         assert spec["template"]["spec"]["nodeSelector"] == RESIDENCY
         assert services[spec["serviceName"]]["spec"]["clusterIP"] == "None"  # headless
+
+
+def test_long_running_containers_have_probes() -> None:
+    """Every container that keeps running is watched (liveness); the ones behind a Service
+    also say when they can take traffic (readiness)."""
+    behind_a_service = {
+        doc["spec"]["selector"]["app.kubernetes.io/name"]
+        for doc in documents()
+        if doc["kind"] == "Service"
+    }
+    for workload in workloads():
+        if workload["kind"] == "Job":
+            continue  # a Job runs once and stops
+        name = workload["metadata"]["name"]
+        for container in workload["spec"]["template"]["spec"]["containers"]:
+            assert "livenessProbe" in container, name
+            assert name not in behind_a_service or "readinessProbe" in container, name

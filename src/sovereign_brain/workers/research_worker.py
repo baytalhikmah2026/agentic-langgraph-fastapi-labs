@@ -3,6 +3,7 @@
 Start one with:  python -m sovereign_brain.workers.research_worker
 In the cluster, KEDA starts workers while jobs wait and stops them when the queue stays empty.
 When Kubernetes asks a worker to stop (SIGTERM), it finishes its current job first.
+Lab 86: a heartbeat file shows Kubernetes the worker is still alive (see heartbeat.py).
 """
 
 import asyncio
@@ -25,6 +26,7 @@ from sovereign_brain.memory.checkpoints import open_checkpointer
 from sovereign_brain.memory.threads import thread_config
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.mcp_host import load_mcp_tools
+from sovereign_brain.workers.heartbeat import beat
 from sovereign_brain.workers.research_queue import ResearchQueue
 
 logger = logging.getLogger("sovereign_brain.worker")
@@ -53,6 +55,7 @@ async def run_job(
 
 
 async def work(stop: asyncio.Event) -> None:
+    heart = asyncio.create_task(beat())  # Lab 86: a sign of life for the liveness probe
     settings = get_settings()
     engine = create_engine(settings)
     portfolio = PortfolioService(async_sessionmaker(engine, expire_on_commit=False))
@@ -79,6 +82,7 @@ async def work(stop: asyncio.Event) -> None:
                 await queue.finish(job_id, result=result)
                 logger.info("Job %s completed", job_id)
     logger.info("Research worker stopped")
+    heart.cancel()
     await redis.aclose()
     await engine.dispose()
 

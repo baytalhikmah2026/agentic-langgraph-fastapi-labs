@@ -6,6 +6,10 @@ metadata:
   name: api
 spec:
   replicas: 2
+  strategy:
+    rollingUpdate:  # Lab 86: never fewer ready copies than wanted during an update
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: api
@@ -37,6 +41,30 @@ spec:
             - name: market-certs
               mountPath: /certs
               readOnly: true
+          startupProbe:  # Lab 86: the first start loads spaCy, the MCP servers and the graphs
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36  # up to 3 minutes
+          livenessProbe:  # a stuck process gets restarted
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:  # no database or Redis: no traffic for this pod until they're back
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          lifecycle:
+            preStop:  # leave the Service first, then stop: no request is cut off
+              sleep:
+                seconds: 5
           resources:
             requests:
               cpu: 250m

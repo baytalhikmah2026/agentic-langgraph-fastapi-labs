@@ -38,6 +38,15 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql
+          readinessProbe:  # Lab 86: the same check Compose uses
+            exec:
+              command: ["pg_isready", "-U", "sb", "-d", "sovereign_brain"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "sb", "-d", "sovereign_brain"]
+            periodSeconds: 10
+            failureThreshold: 6
           resources:
             requests:
               cpu: 100m

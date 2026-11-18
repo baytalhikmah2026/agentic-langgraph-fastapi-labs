@@ -29,6 +29,15 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+          readinessProbe:  # Lab 86
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 10
+            failureThreshold: 6
           resources:
             requests:
               cpu: 100m

@@ -48,6 +48,15 @@ spec:
             - name: certs
               mountPath: /certs
               readOnly: true
+          readinessProbe:  # Lab 86: mutual TLS refuses plain HTTP checks, so knock on the port
+            tcpSocket:
+              port: https
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: https
+            periodSeconds: 10
+            failureThreshold: 3
           resources:
             requests:
               cpu: 50m
