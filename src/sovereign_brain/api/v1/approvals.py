@@ -11,10 +11,11 @@ from langgraph.types import StateSnapshot
 from sovereign_brain.api.v1.research import RunContext
 from sovereign_brain.core.rate_limit import model_call_gate
 from sovereign_brain.core.request_id import get_request_id
-from sovereign_brain.core.security import get_current_user
+from sovereign_brain.core.security import CurrentUser, get_current_user
 from sovereign_brain.core.settings import get_settings
-from sovereign_brain.db.repository import Clients
-from sovereign_brain.schemas.approvals import ApprovalStatus
+from sovereign_brain.db.repository import Approvals, Clients
+from sovereign_brain.graphs.trail import mark
+from sovereign_brain.schemas.approvals import ApprovalStatus, ApprovalSummary, Decision
 
 router = APIRouter(
     prefix="/v1/approvals", tags=["approvals"], dependencies=[Depends(get_current_user)]
@@ -44,14 +45,16 @@ def approval_config(approval_id: str) -> dict:
 
 
 def approval_status(approval_id: str, snapshot: StateSnapshot) -> ApprovalStatus:
-    """Read the saved run: waiting before deliver, paused somewhere else, or delivered."""
+    """Read the saved run: waiting before deliver, paused somewhere else, delivered or rejected."""
     values = snapshot.values
     if "deliver" in snapshot.next:
         state = "awaiting_approval"
     elif snapshot.next:
         state = "paused"
-    else:
+    elif values.get("delivered"):
         state = "delivered"
+    else:
+        state = "rejected"  # finished without a delivery (Lab 63)
     return ApprovalStatus(
         approval_id=approval_id,
         client_id=values["client_id"],
@@ -75,6 +78,8 @@ async def saved_status(approval_id: str, graph: CompiledStateGraph) -> ApprovalS
 async def request_report(
     client_id: ClientId,
     clients: Clients,
+    approvals: Approvals,
+    user: CurrentUser,
     graph: ApprovalGraph,
     context: RunContext,
     inspect: Inspect = None,
@@ -83,6 +88,7 @@ async def request_report(
 
     Lab 62: with ?inspect=draft the run also stops right after the first draft, so a person can
     look at what the model wrote before the guardrail checks it.
+    Lab 63: the request is written into the approvals register, with who asked for it.
     """
     client = await clients.get(client_id.upper())
     if client is None:
@@ -95,8 +101,23 @@ async def request_report(
         context=context,
         interrupt_after=[inspect] if inspect else None,  # only for this run (Lab 62)
     )
+    await approvals.add(approval_id, client.id, requested_by=user.username)
     logger.info("Report for %s waits for approval %s", client.id, approval_id)
     return await saved_status(approval_id, graph)
+
+
+@router.get("")
+async def list_waiting(approvals: Approvals) -> list[ApprovalSummary]:
+    """Every report still waiting for a decision, oldest first (Lab 63)."""
+    return [
+        ApprovalSummary(
+            approval_id=record.id,
+            client_id=record.client_id,
+            requested_by=record.requested_by,
+            requested_at=record.requested_at,
+        )
+        for record in await approvals.waiting()
+    ]
 
 
 @router.get("/{approval_id}")
@@ -115,4 +136,37 @@ async def continue_run(
         detail = f"Approval {approval_id} is {current.status}; only a paused run can continue"
         raise HTTPException(status.HTTP_409_CONFLICT, detail)
     await graph.ainvoke(None, config=approval_config(approval_id), context=context)
+    return await saved_status(approval_id, graph)
+
+
+@router.post("/{approval_id}/decision")
+async def decide(
+    approval_id: ApprovalId,
+    decision: Decision,
+    user: CurrentUser,
+    approvals: Approvals,
+    graph: ApprovalGraph,
+    context: RunContext,
+) -> ApprovalStatus:
+    """Approve (the report is delivered) or reject (it is never sent), by a second person."""
+    current = await saved_status(approval_id, graph)
+    record = await approvals.get(approval_id)
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Approval {approval_id} is not registered")
+    if current.status != "awaiting_approval":
+        detail = f"Approval {approval_id} is {current.status}; only a waiting report can be decided"
+        raise HTTPException(status.HTTP_409_CONFLICT, detail)
+    if record.requested_by == user.username:  # the four-eyes rule
+        detail = "You requested this report; a second person must decide"
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
+    config = approval_config(approval_id)
+    if decision.action == "approve":
+        await graph.ainvoke(None, config=config, context=context)  # runs deliver
+    else:
+        note = f"Rejected by {user.username}: {decision.comment or 'no comment'}"
+        # Record the rejection as if deliver had run: the run ends, and nothing is sent
+        await graph.aupdate_state(config, {"trail": mark("deliver", note)}, as_node="deliver")
+    outcome = "approved" if decision.action == "approve" else "rejected"
+    await approvals.decide(record, outcome, decided_by=user.username, comment=decision.comment)
+    logger.info("Approval %s %s by %s", approval_id, outcome, user.username)
     return await saved_status(approval_id, graph)

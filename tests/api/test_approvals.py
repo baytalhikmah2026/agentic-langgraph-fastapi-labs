@@ -81,3 +81,74 @@ def test_an_inspected_draft_continues_to_the_approval_line(
     assert (started.json()["status"], started.json()["next"]) == ("paused", ["check"])
     assert continued.json()["status"] == "awaiting_approval"
     assert again.status_code == 409  # waiting for approval is not an inspection pause
+
+
+def test_a_second_analyst_approves_and_the_report_is_sent(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    omar_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+
+    waiting = client.get("/v1/approvals", headers=omar_headers).json()
+    decided = client.post(
+        f"/v1/approvals/{approval_id}/decision", json={"action": "approve"}, headers=omar_headers
+    )
+
+    assert [(w["approval_id"], w["requested_by"]) for w in waiting] == [(approval_id, "amina")]
+    assert decided.json()["status"] == "delivered"
+    assert (tmp_path / f"{approval_id}.json").exists()
+    assert client.get("/v1/approvals", headers=omar_headers).json() == []
+
+
+def test_nobody_approves_their_own_report(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+
+    decided = client.post(
+        f"/v1/approvals/{approval_id}/decision", json={"action": "approve"}, headers=auth_headers
+    )
+
+    assert decided.status_code == 403  # four eyes: a second person must decide
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_rejected_report_stays_unsent(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    omar_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    decision = {"action": "reject", "comment": "Please add the bond holdings."}
+
+    rejected = client.post(
+        f"/v1/approvals/{approval_id}/decision", json=decision, headers=omar_headers
+    )
+    again = client.post(
+        f"/v1/approvals/{approval_id}/decision", json={"action": "approve"}, headers=omar_headers
+    )
+
+    assert rejected.json()["status"] == "rejected"
+    assert rejected.json()["trail"][-1]["note"] == "Rejected by omar: Please add the bond holdings."
+    assert list(tmp_path.iterdir()) == []
+    assert again.status_code == 409  # a decided report stays decided

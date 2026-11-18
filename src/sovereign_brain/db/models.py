@@ -62,3 +62,18 @@ class ThreadCleanup(Base):
     ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     threads_removed: Mapped[int] = mapped_column(Integer)
     trigger: Mapped[str] = mapped_column(String(20))  # "worker" or "manual"
+
+
+class Approval(Base):
+    """The approvals register (Lab 63): one report waiting for a person, and the decision."""
+
+    __tablename__ = "approvals"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)  # the approval_id
+    client_id: Mapped[str] = mapped_column(String(6))
+    requested_by: Mapped[str] = mapped_column(String(40))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[str] = mapped_column(String(20))  # "waiting", "approved" or "rejected"
+    decided_by: Mapped[str | None] = mapped_column(String(40))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    comment: Mapped[str | None] = mapped_column(String(500))

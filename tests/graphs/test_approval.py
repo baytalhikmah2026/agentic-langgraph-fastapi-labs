@@ -1,4 +1,4 @@
-"""Human approval (Labs 61-62): pauses before deliver, and after a draft on request."""
+"""Human approval (Labs 61-63): pauses before deliver, after a draft on request, rejection."""
 
 import json
 from collections.abc import Callable
@@ -9,7 +9,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from sovereign_brain.graphs.context import ResearchContext
 from sovereign_brain.graphs.report import build_report_graph
-from sovereign_brain.graphs.trail import stations
+from sovereign_brain.graphs.trail import mark, stations
 
 APPROVAL_ID = "4b7e1c9a2d5f4e3b8a6c0d1e2f3a4b5c"
 CONFIG = {"configurable": {"thread_id": f"approval:{APPROVAL_ID}"}}
@@ -94,3 +94,18 @@ async def test_an_inspection_pause_comes_right_after_the_draft(
     assert after_draft.next == ("check",)  # the draft is written, not yet checked
     assert after_draft.values["report"] == GOOD
     assert before_deliver.next == ("deliver",)  # the run-time pause applied only once
+
+
+async def test_a_rejected_report_is_never_sent(make_model: Callable, tmp_path: Path) -> None:
+    graph = build_report_graph(
+        make_model([as_report(GOOD, "r1")]), checkpointer=InMemorySaver(), outbox=tmp_path
+    )
+    await graph.ainvoke(REQUEST, config=CONFIG, context=CONTEXT)
+
+    note = mark("deliver", "Rejected by omar: no comment")
+    await graph.aupdate_state(CONFIG, {"trail": note}, as_node="deliver")  # as if deliver ran
+    snapshot = await graph.aget_state(CONFIG)
+
+    assert snapshot.next == ()  # the run is over
+    assert "delivered" not in snapshot.values
+    assert list(tmp_path.iterdir()) == []  # and nothing was sent
