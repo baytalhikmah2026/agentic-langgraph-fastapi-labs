@@ -2,23 +2,17 @@
 
 A run's state lives in the checkpointer (PostgreSQL in the cluster), keyed by its run ID, so a
 run started on one API pod can be followed and approved on another.
+Lab 99: scopes for the agentic actions, a run budget, and sign-in as the live channel's first
+message (never in the address, where it would end up in logs).
 """
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Path,
-    Query,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
-)
+from fastapi import APIRouter, Depends, HTTPException, Path, WebSocket, WebSocketDisconnect, status
 from fastapi.requests import HTTPConnection
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
@@ -28,13 +22,13 @@ from sovereign_brain.api.v1.approvals import DeskSigner
 from sovereign_brain.api.v1.research import get_portfolio
 from sovereign_brain.capstone.graph import BrainContext
 from sovereign_brain.capstone.schemas import BrainEvent, BrainRequest
-from sovereign_brain.core.rate_limit import model_call_gate
-from sovereign_brain.core.security import CurrentUser, user_from_token
+from sovereign_brain.core.rate_limit import brain_run_gate, model_call_gate
+from sovereign_brain.core.security import CurrentUser, token_scopes, user_from_token
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import AuditLog, Users
 from sovereign_brain.memory.threads import thread_config
 from sovereign_brain.schemas.approvals import Decision
-from sovereign_brain.security.rbac import allowed, require
+from sovereign_brain.security.rbac import require, require_scope
 from sovereign_brain.security.signing import report_hash
 from sovereign_brain.services.portfolio import PortfolioService
 
@@ -43,6 +37,7 @@ logger = logging.getLogger("sovereign_brain.brain")
 RunId = Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")]
 SPECIALISTS = {"supervisor", "extraction", "sanitization", "analysis"}
 OUTCOMES = {"approve": "approved", "reject": "rejected"}
+SIGN_IN_SECONDS = 10  # the live channel waits this long for the sign-in message
 
 
 def get_brain_graph(connection: HTTPConnection) -> CompiledStateGraph:
@@ -66,7 +61,7 @@ def brain_context(
 def run_config(run_id: str) -> dict:
     return {
         **thread_config(f"brain:{run_id}"),
-        "recursion_limit": get_settings().graph_recursion_limit,
+        "recursion_limit": get_settings().brain_recursion_limit,  # Lab 99: a hard stop
     }
 
 
@@ -100,7 +95,11 @@ async def run_status(graph: CompiledStateGraph, run_id: str) -> dict:
 
 @router.post(
     "/runs",
-    dependencies=[Depends(require("research:run")), Depends(model_call_gate)],
+    dependencies=[
+        Depends(require_scope("brain:run")),  # Lab 99: the token must allow this action
+        Depends(model_call_gate),
+        Depends(brain_run_gate),  # Lab 99: runs per analyst per hour
+    ],
 )
 async def start_run(
     body: BrainRequest,
@@ -125,7 +124,7 @@ async def get_run(run_id: RunId, graph: BrainGraph) -> dict:
     return await run_status(graph, run_id)
 
 
-@router.post("/runs/{run_id}/decision", dependencies=[Depends(require("approvals:decide"))])
+@router.post("/runs/{run_id}/decision", dependencies=[Depends(require_scope("brain:decide"))])
 async def decide_run(
     run_id: RunId,
     decision: Decision,
@@ -163,32 +162,36 @@ async def decide_run(
     return await run_status(graph, run_id)
 
 
+async def socket_user(websocket: WebSocket, users: Users) -> str | None:
+    """Lab 99: the first message signs in, {"token": "..."}; the user's name, or None."""
+    try:
+        first = await asyncio.wait_for(websocket.receive_json(), SIGN_IN_SECONDS)
+        token = str(first.get("token", ""))
+        user = await user_from_token(token, users.get)
+    except (TimeoutError, HTTPException, ValueError, AttributeError):
+        return None
+    return user.username if "brain:run" in token_scopes(token) else None
+
+
 @router.websocket("/ws")
 async def live_run(
-    websocket: WebSocket,
-    graph: BrainGraph,
-    portfolio: Portfolio,
-    users: Users,
-    token: Annotated[str, Query()] = "",
+    websocket: WebSocket, graph: BrainGraph, portfolio: Portfolio, users: Users
 ) -> None:
-    """Send one BrainRequest, then watch every step of the team until the pause."""
+    """Sign in, send one BrainRequest, then watch every step of the team until the pause."""
     await websocket.accept()
-    try:  # browsers can't send an Authorization header on a WebSocket (Lab 99 improves this)
-        user = await user_from_token(token, users.get)
-    except HTTPException:
-        user = None
-    if user is None or not allowed(user.role, "research:run"):
+    username = await socket_user(websocket, users)
+    if username is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     run_id = uuid4().hex
     try:
         request = BrainRequest.model_validate_json(await websocket.receive_text())
         await websocket.send_json(event("started", run_id, client_id=request.client_id))
-        start = {"request": request.model_dump(), "requested_by": user.username, "steps": []}
+        start = {"request": request.model_dump(), "requested_by": username, "steps": []}
         async for update in graph.astream(
             start,
             config=run_config(run_id),
-            context=brain_context(websocket, portfolio, user.username),
+            context=brain_context(websocket, portfolio, username),
             stream_mode="updates",
         ):
             for node, delta in update.items():

@@ -15,6 +15,7 @@ from sovereign_brain.core.security import (
 from sovereign_brain.core.settings import get_settings
 from sovereign_brain.db.repository import Users
 from sovereign_brain.schemas.auth import Token, UserOut
+from sovereign_brain.security.rbac import grant
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
@@ -28,7 +29,9 @@ async def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], users: Us
     # keeps serving other requests in the meantime (Lab 20)
     if not await run_in_threadpool(verify_password, form.password, user.hashed_password):
         raise not_authenticated("Wrong username or password")
-    token, expires_in = create_access_token(user, get_settings())
+    # Lab 99: the token carries the scopes asked for (form field "scope"), within the role
+    scopes = grant(user.role, form.scopes)
+    token, expires_in = create_access_token(user, get_settings(), scopes)
     return Token(access_token=token, expires_in=expires_in)
 
 

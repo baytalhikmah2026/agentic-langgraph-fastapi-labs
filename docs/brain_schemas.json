@@ -150,6 +150,7 @@
       },
       "sectors": {
         "items": {
+          "pattern": "^[A-Za-z][A-Za-z &-]{1,39}$",
           "type": "string"
         },
         "maxItems": 5,

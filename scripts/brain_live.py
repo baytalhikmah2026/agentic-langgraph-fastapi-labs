@@ -1,5 +1,7 @@
 """Lab 98: start a Brain run over the live channel and print every step as it happens.
 
+Lab 99: it signs in with its first message; the token never appears in the address.
+
 Usage: uv run python scripts/brain_live.py [username] [client_id] [question]
 Set SB_API_URL and SB_API_CA_FILE to go through the HTTPS gate (Lab 87): then it uses wss://.
 """
@@ -16,8 +18,9 @@ QUESTION = "How big is this client's energy exposure, and what are the main risk
 
 async def main(username: str, request: dict) -> None:
     token = login(API_URL, username)
-    url = API_URL.replace("http", "ws", 1) + f"/v1/brain/ws?token={token}"
+    url = API_URL.replace("http", "ws", 1) + "/v1/brain/ws"
     async with connect(url, ssl=tls_verify() if url.startswith("wss") else None) as socket:
+        await socket.send(json.dumps({"token": token}))  # first message: sign in
         await socket.send(json.dumps(request))
         async for message in socket:
             event = json.loads(message)

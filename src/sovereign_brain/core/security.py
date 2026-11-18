@@ -25,13 +25,26 @@ def verify_password(password: str, hashed: str) -> bool:
     return password_hash.verify(password, hashed)
 
 
-def create_access_token(user: User, settings: Settings) -> tuple[str, int]:
-    """A signed token that says who the user is and until when it is valid."""
+def create_access_token(
+    user: User, settings: Settings, scopes: list[str] | None = None
+) -> tuple[str, int]:
+    """A signed token that says who the user is, what it may do, and until when it is valid."""
     lifetime = timedelta(minutes=settings.access_token_minutes)
     claims = {"sub": user.username, "role": user.role, "exp": datetime.now(UTC) + lifetime}
+    if scopes is not None:  # Lab 99: the agentic actions this sign-in allows
+        claims["scope"] = " ".join(scopes)
     secret = settings.jwt_secret.get_secret_value()
     token = jwt.encode(claims, secret, algorithm=settings.jwt_algorithm)
     return token, int(lifetime.total_seconds())
+
+
+def token_scopes(token: str) -> set[str]:
+    """The scopes written into a (valid) token; an old token without scopes has none."""
+    settings = get_settings()
+    claims = jwt.decode(
+        token, settings.jwt_secret.get_secret_value(), algorithms=[settings.jwt_algorithm]
+    )
+    return set(claims.get("scope", "").split())
 
 
 def not_authenticated(message: str) -> HTTPException:

@@ -9,13 +9,17 @@ Every hand-over has a schema, so each agent can rely on what it receives, the gr
 stays valid, and the API can stream each step safely to the analyst.
 """
 
+import unicodedata
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from sovereign_brain.security.injection import injection_rules
 
 Agent = Literal["extraction", "sanitization", "analysis"]
 Closed = ConfigDict(extra="forbid", str_strip_whitespace=True)  # unknown fields are refused
+Sector = Annotated[str, Field(pattern=r"^[A-Za-z][A-Za-z &-]{1,39}$")]  # Lab 99: names only
 
 
 class BrainRequest(BaseModel):
@@ -25,7 +29,17 @@ class BrainRequest(BaseModel):
 
     client_id: str = Field(pattern=r"^C-\d{4}$", examples=["C-1042"])
     question: str = Field(min_length=10, max_length=1000)
-    sectors: list[str] = Field(default_factory=list, max_length=5)  # optional focus
+    sectors: list[Sector] = Field(default_factory=list, max_length=5)  # optional focus
+
+    @field_validator("question")
+    @classmethod
+    def plain_question(cls, question: str) -> str:
+        """Lab 99: the door checks the question itself, before any agent sees it."""
+        if any(unicodedata.category(char) == "Cc" and char not in "\n\t" for char in question):
+            raise ValueError("The question contains control characters")
+        if injection_rules(question):  # the guard from Lab 71, now part of the contract
+            raise ValueError("The question contains instructions for the model")
+        return question
 
 
 class SupervisorDecision(BaseModel):

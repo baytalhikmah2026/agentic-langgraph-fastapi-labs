@@ -25,3 +25,11 @@ limiter = Limiter(
 @limiter.limit(get_settings().model_rate_limit)
 async def model_call_gate(request: Request, user: CurrentUser) -> None:
     """One shared gate for every endpoint that runs the model: each call counts once."""
+
+
+@limiter.limit(lambda: get_settings().brain_run_limit)
+async def brain_run_gate(request: Request, user: CurrentUser) -> None:
+    """Lab 99: a budget for Brain runs, per analyst, on top of the model gate (Lab 17).
+
+    A run calls the model several times, so runaway clients are stopped by the hour.
+    """

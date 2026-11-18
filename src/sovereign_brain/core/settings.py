@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     otel_service_name: str = "sovereign-brain-api"
     # Personal data (Lab 72): mask it in research questions before the model reads them
     pii_masking: bool = True
+    # The Brain (Lab 99): runs per analyst, and the most steps one run may take
+    brain_run_limit: str = "10/hour"
+    brain_recursion_limit: int = 20
     # Grafana alerts (Lab 69): the token Grafana sends to POST /v1/ops/alerts
     alert_webhook_token: SecretStr = SecretStr("local-alert-token-change-me")
 

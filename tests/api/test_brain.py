@@ -1,4 +1,4 @@
-"""The Sovereign Enterprise Brain (Lab 98): the team, the pause, four eyes, the live channel."""
+"""The Sovereign Enterprise Brain (Labs 98-99): team, pause, four eyes, live channel, guards."""
 
 import itertools
 
@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from sovereign_brain.api.v1.brain import get_brain_graph
 from sovereign_brain.capstone.graph import build_brain_graph
+from sovereign_brain.core.settings import get_settings
 from sovereign_brain.security.signing import verify
 
 REQUEST = {"client_id": "C-1042", "question": "How big is this client's energy exposure?"}
@@ -71,7 +72,8 @@ def test_the_live_channel_streams_every_step(
     client: TestClient, auth_headers: dict[str, str], brain: None
 ) -> None:
     token = auth_headers["Authorization"].removeprefix("Bearer ")
-    with client.websocket_connect(f"/v1/brain/ws?token={token}") as socket:
+    with client.websocket_connect("/v1/brain/ws") as socket:
+        socket.send_json({"token": token})  # Lab 99: sign in with the first message
         socket.send_json(REQUEST)
         events = []
         while not events or events[-1]["type"] != "approval_needed":
@@ -83,8 +85,38 @@ def test_the_live_channel_streams_every_step(
 
 
 def test_the_live_channel_refuses_a_bad_token(client: TestClient, brain: None) -> None:
-    with client.websocket_connect("/v1/brain/ws?token=forged") as socket:
+    with client.websocket_connect("/v1/brain/ws") as socket:
+        socket.send_json({"token": "forged"})
         with pytest.raises(WebSocketDisconnect) as closed:
             socket.receive_json()
 
     assert closed.value.code == 1008  # policy violation
+
+
+def test_a_narrow_sign_in_cannot_start_the_brain(
+    client: TestClient, password: str, brain: None
+) -> None:
+    form = {"username": "amina", "password": password, "scope": "research:run"}
+    token = client.post("/v1/auth/token", data=form).json()["access_token"]
+
+    answer = client.post(
+        "/v1/brain/runs", json=REQUEST, headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert answer.status_code == 403
+    assert "brain:run" in answer.json()["message"]
+
+
+def test_the_run_budget_stops_a_runaway_client(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    brain: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "brain_run_limit", "1/hour")
+
+    first = client.post("/v1/brain/runs", json=REQUEST, headers=auth_headers)
+    second = client.post("/v1/brain/runs", json=REQUEST, headers=auth_headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
