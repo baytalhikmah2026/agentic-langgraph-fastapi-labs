@@ -8,7 +8,11 @@ from sovereign_brain.core.vault import with_vault_secrets
 
 def test_vault_values_replace_the_local_ones() -> None:
     settings = Settings(vault_addr="http://vault:8200")
-    vault = {"jwt_secret": "from-vault-jwt", "market_api_token": "from-vault-market"}
+    vault = {
+        "jwt_secret": "from-vault-jwt",
+        "market_api_token": "from-vault-market",
+        "approval_signing_key": "from-vault-pem",
+    }
 
     loaded = with_vault_secrets(settings, read=lambda _: vault)
 

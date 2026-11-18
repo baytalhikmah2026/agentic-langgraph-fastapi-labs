@@ -1,12 +1,13 @@
 """Read clients and users from the database. Endpoints use these instead of writing SQL."""
 
+import json
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends
 from sqlalchemy import select
 
-from sovereign_brain.db.models import Approval, Client, User
+from sovereign_brain.db.models import Approval, ApprovalSignature, Client, User
 from sovereign_brain.db.session import DbSession
 
 
@@ -68,6 +69,21 @@ class ApprovalRepository:
         approval.decided_at = datetime.now(UTC)
         approval.comment = comment
         await self.session.commit()
+
+    async def add_signature(self, approval_id: str, statement: dict, signature: str) -> None:
+        """Keep the signed statement of a decision (Lab 76)."""
+        self.session.add(
+            ApprovalSignature(
+                approval_id=approval_id,
+                statement=json.dumps(statement),
+                signature=signature,
+                signed_at=datetime.now(UTC),
+            )
+        )
+        await self.session.commit()
+
+    async def get_signature(self, approval_id: str) -> ApprovalSignature | None:
+        return await self.session.get(ApprovalSignature, approval_id)
 
 
 Approvals = Annotated[ApprovalRepository, Depends(ApprovalRepository)]

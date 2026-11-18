@@ -1,7 +1,7 @@
 """Lab 75: prepare Vault for the Research Desk (safe to run again).
 
 1. switch on Vault's audit log (every request is written to /vault/logs/audit.log)
-2. store the API's secrets, with new random values each time
+2. store the API's secrets: new random tokens each time; the signing key (Lab 76) is kept
 3. a policy that may only read those secrets
 4. an AppRole login for the API, with the role ID and secret ID from your .env
 
@@ -11,9 +11,10 @@ Usage: uv run python scripts/vault_setup.py   (Vault running, SB_VAULT_ROOT_TOKE
 import secrets
 
 import hvac
-from hvac.exceptions import InvalidRequest
+from hvac.exceptions import InvalidPath, InvalidRequest
 
 from sovereign_brain.core.settings import Settings
+from sovereign_brain.security.signing import new_signing_key_pem
 
 VAULT = "http://localhost:8200"
 ROLE = "sovereign-brain-api"
@@ -30,12 +31,19 @@ def main() -> None:
     audit = client.sys.list_enabled_audit_devices()
     if "file/" not in audit.get("data", audit):
         client.sys.enable_audit_device("file", options={"file_path": "/vault/logs/audit.log"})
+    try:  # keep the signing key: old signatures must stay checkable (Lab 76)
+        stored = client.secrets.kv.v2.read_secret_version(
+            path=settings.vault_secret_path, mount_point="secret", raise_on_deleted_version=True
+        )["data"]["data"]
+    except InvalidPath:  # nothing stored yet
+        stored = {}
     client.secrets.kv.v2.create_or_update_secret(
         path=settings.vault_secret_path,
         mount_point="secret",
         secret={
             "jwt_secret": secrets.token_urlsafe(48),
             "market_api_token": secrets.token_urlsafe(32),
+            "approval_signing_key": stored.get("approval_signing_key") or new_signing_key_pem(),
         },
     )
     client.sys.create_or_update_policy(name=ROLE, policy=POLICY)

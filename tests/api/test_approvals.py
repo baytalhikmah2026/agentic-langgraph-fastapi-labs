@@ -12,6 +12,7 @@ from prometheus_client import REGISTRY
 
 from sovereign_brain.api.v1.approvals import get_approval_graph
 from sovereign_brain.graphs.report import build_report_graph
+from sovereign_brain.security.signing import report_hash, verify
 
 GOOD = {
     "client_id": "C-1042",
@@ -391,3 +392,31 @@ def test_an_auditor_reads_but_cannot_act(
     assert (listed.status_code, history.status_code) == (200, 200)
     assert (decided.status_code, requested.status_code) == (403, 403)
     assert decided.json()["message"] == "The role auditor may not use approvals:decide"
+
+
+def test_a_decision_is_signed_and_can_be_checked(
+    app: FastAPI,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    omar_headers: dict[str, str],
+    yusuf_headers: dict[str, str],
+    make_model: Callable,
+    tmp_path: Path,
+) -> None:
+    approval_app(app, make_model, tmp_path, as_report(GOOD, "r1"))
+    approval_id = client.post("/v1/approvals/reports/C-1042", headers=auth_headers).json()[
+        "approval_id"
+    ]
+    client.post(
+        f"/v1/approvals/{approval_id}/decision", json={"action": "approve"}, headers=omar_headers
+    )
+
+    signed = client.get(f"/v1/approvals/{approval_id}/signature", headers=yusuf_headers).json()
+    key = client.get("/v1/approvals/signing-key", headers=yusuf_headers).json()
+
+    statement = signed["statement"]
+    assert (statement["decision"], statement["decided_by"]) == ("approved", "omar")
+    assert statement["report_sha256"] == report_hash(GOOD)
+    assert verify(statement, signed["signature"], key["public_key_pem"])
+    forged = {**statement, "decided_by": "amina"}
+    assert not verify(forged, signed["signature"], key["public_key_pem"])

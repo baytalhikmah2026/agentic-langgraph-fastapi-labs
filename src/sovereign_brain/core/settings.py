@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     vault_secret_id: SecretStr = SecretStr("")
     vault_secret_path: str = "sovereign-brain/api"
     vault_root_token: SecretStr = SecretStr("")  # only for scripts/vault_setup.py
+    # Signed decisions (Lab 76): the desk's Ed25519 key as PEM text, normally from Vault
+    approval_signing_key: SecretStr = SecretStr("")
     # Mutual TLS to the market API (Lab 74): empty means plain HTTP (tests, local runs)
     market_ca_file: str = ""
     market_client_cert: str = ""

@@ -55,6 +55,7 @@ from sovereign_brain.memory.shared_state import open_shared_store
 from sovereign_brain.memory.summaries import ThreadArchivist
 from sovereign_brain.observability import metrics
 from sovereign_brain.observability.tracing import setup_tracing
+from sovereign_brain.security.signing import Signer
 from sovereign_brain.services.portfolio import PortfolioService
 from sovereign_brain.tools.mcp_host import load_mcp_tools
 
@@ -152,6 +153,8 @@ def create_app() -> FastAPI:
     configure_logging(settings.log_level)
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=lifespan)
     app.state.limiter = limiter
+    # Signed decisions (Lab 76): the desk's key from Vault, or a temporary one
+    app.state.signer = Signer.from_pem(settings.approval_signing_key.get_secret_value())
     register_exception_handlers(app)
     app.add_middleware(RequestIdMiddleware)
     app.state.tracer_provider = setup_tracing(app, settings)  # Lab 66, if switched on

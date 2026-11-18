@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from sovereign_brain.db.base import Base
@@ -77,3 +77,14 @@ class Approval(Base):
     decided_by: Mapped[str | None] = mapped_column(String(40))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     comment: Mapped[str | None] = mapped_column(String(500))
+
+
+class ApprovalSignature(Base):
+    """The signed statement about one decision (Lab 76), kept next to the register row."""
+
+    __tablename__ = "approval_signatures"
+
+    approval_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    statement: Mapped[str] = mapped_column(Text)  # the signed JSON, exactly as signed
+    signature: Mapped[str] = mapped_column(String(120))  # base64 of the Ed25519 signature
+    signed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

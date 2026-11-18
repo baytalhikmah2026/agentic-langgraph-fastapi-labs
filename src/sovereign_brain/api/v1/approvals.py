@@ -1,5 +1,6 @@
 """Reports that wait for a person (Module 7): the control tower of the Research Desk."""
 
+import json
 import logging
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -28,8 +29,11 @@ from sovereign_brain.schemas.approvals import (
     Feedback,
     HistoryStep,
     Override,
+    SignedDecision,
+    SigningKey,
 )
 from sovereign_brain.security.rbac import require
+from sovereign_brain.security.signing import Signer, report_hash
 
 router = APIRouter(
     prefix="/v1/approvals", tags=["approvals"], dependencies=[Depends(get_current_user)]
@@ -47,6 +51,14 @@ def get_approval_graph(request: Request) -> CompiledStateGraph:
 
 
 ApprovalGraph = Annotated[CompiledStateGraph, Depends(get_approval_graph)]
+
+
+def get_signer(request: Request) -> Signer:
+    """The desk's signer, created at start-up with the key from Vault (Lab 76)."""
+    return request.app.state.signer
+
+
+DeskSigner = Annotated[Signer, Depends(get_signer)]
 
 
 def approval_config(approval_id: str, actor: str | None = None) -> dict:
@@ -151,6 +163,12 @@ async def list_waiting(approvals: Approvals) -> list[ApprovalSummary]:
     ]
 
 
+@router.get("/signing-key", dependencies=[Depends(require("approvals:read"))])
+async def signing_key(signer: DeskSigner) -> SigningKey:
+    """The public key that checks every signed decision (Lab 76); it is safe to share."""
+    return SigningKey(key_id=signer.key_id, public_key_pem=signer.public_pem)
+
+
 @router.get("/{approval_id}", dependencies=[Depends(require("approvals:read"))])
 async def get_approval(approval_id: ApprovalId, graph: ApprovalGraph) -> ApprovalStatus:
     """Where one approval stands, read from the checkpointer (it survives restarts)."""
@@ -202,8 +220,12 @@ async def decide(
     approvals: Approvals,
     graph: ApprovalGraph,
     context: RunContext,
+    signer: DeskSigner,
 ) -> ApprovalStatus:
-    """Approve (the report is delivered) or reject (it is never sent), by a second person."""
+    """Approve (the report is delivered) or reject (it is never sent), by a second person.
+
+    Lab 76: the decision is written as a statement and signed with the desk's key.
+    """
     record = await waiting_record(approval_id, user, approvals, graph)
     config = approval_config(approval_id, actor=user.username)
     if decision.action == "approve":
@@ -216,7 +238,19 @@ async def decide(
     await approvals.decide(record, outcome, decided_by=user.username, comment=decision.comment)
     APPROVAL_ACTIONS.labels(outcome).inc()  # Lab 68
     logger.info("Approval %s %s by %s", approval_id, outcome, user.username)
-    return await saved_status(approval_id, graph)
+    final = await saved_status(approval_id, graph)
+    statement = {
+        "approval_id": approval_id,
+        "client_id": record.client_id,
+        "decision": outcome,
+        "decided_by": user.username,
+        "requested_by": record.requested_by,
+        "decided_at": record.decided_at.isoformat(),
+        "report_sha256": report_hash(final.report.model_dump() if final.report else {}),
+        "key_id": signer.key_id,
+    }
+    await approvals.add_signature(approval_id, statement, signer.sign(statement))
+    return final
 
 
 @router.post(
@@ -307,3 +341,14 @@ async def history(
             comment=record.comment,
         )
     return ApprovalHistory(approval=current, register=register, steps=steps)
+
+
+@router.get(
+    "/{approval_id}/signature", dependencies=[Depends(require("approvals:read"))]
+)
+async def signature(approval_id: ApprovalId, approvals: Approvals) -> SignedDecision:
+    """The signed statement of a decided report (Lab 76)."""
+    signed = await approvals.get_signature(approval_id)
+    if signed is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Approval {approval_id} has no signature")
+    return SignedDecision(statement=json.loads(signed.statement), signature=signed.signature)

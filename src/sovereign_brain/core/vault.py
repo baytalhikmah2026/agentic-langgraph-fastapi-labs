@@ -15,7 +15,7 @@ from sovereign_brain.core.settings import Settings
 
 logger = logging.getLogger("sovereign_brain.vault")
 
-VAULT_FIELDS = ("jwt_secret", "market_api_token")  # the settings Vault provides
+VAULT_FIELDS = ("jwt_secret", "market_api_token", "approval_signing_key")  # Labs 75-76
 
 
 def read_secrets(settings: Settings) -> dict[str, str]:

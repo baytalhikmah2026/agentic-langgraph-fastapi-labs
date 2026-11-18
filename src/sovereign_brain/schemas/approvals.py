@@ -91,3 +91,17 @@ class ApprovalHistory(BaseModel):
     approval: ApprovalStatus
     register: ApprovalRecord | None
     steps: list[HistoryStep]
+
+
+class SigningKey(BaseModel):
+    """The desk's public key (Lab 76): anyone may use it to check a signed decision."""
+
+    key_id: str
+    public_key_pem: str
+
+
+class SignedDecision(BaseModel):
+    """A decision statement and its Ed25519 signature (Lab 76)."""
+
+    statement: dict
+    signature: str
