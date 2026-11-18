@@ -1,0 +1,25 @@
+# The front gate (Lab 87): HTTPS at https://localhost:8443, certificate from our own CA
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: desk
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure  # HTTPS only
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - localhost
+      secretName: desk-tls  # made from ops/certs/desk.crt and desk.key
+  rules:
+    - host: localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  name: http

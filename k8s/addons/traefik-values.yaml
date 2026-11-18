@@ -1,0 +1,13 @@
+# Traefik 3.7 (Helm chart 42.3.1) on the kind cluster (Lab 87)
+# Reached from your computer through the node ports that k8s/kind-config.yaml maps:
+# 30080 -> http://localhost:8080 and 30443 -> https://localhost:8443
+service:
+  type: NodePort
+ports:
+  web:
+    nodePort: 30080
+  websecure:
+    nodePort: 30443
+ingressClass:
+  enabled: true
+  isDefaultClass: true

@@ -4,12 +4,13 @@ import ssl
 from pathlib import Path
 
 import pytest
-from cryptography.x509 import ExtendedKeyUsage
+from cryptography.x509 import DNSName, ExtendedKeyUsage, SubjectAlternativeName
 from cryptography.x509.oid import ExtendedKeyUsageOID
 
 from sovereign_brain.security.certs import (
     client_context,
     issue,
+    load,
     make_ca,
     save,
     server_context,
@@ -73,3 +74,14 @@ def test_a_caller_without_a_certificate_is_refused(certs: Path) -> None:
 
     with pytest.raises(ssl.SSLError):
         handshake(server, anonymous, "market")
+
+
+def test_a_loaded_ca_keeps_issuing(certs: Path) -> None:
+    """Lab 87: more certificates from the same CA, so the earlier ones stay valid."""
+    ca = load(certs, "ca")
+    save(issue(ca, "localhost", ["localhost", "desk.localhost"], client=False), certs, "desk")
+    desk = load(certs, "desk")
+
+    desk.cert.verify_directly_issued_by(ca.cert)  # raises if our CA didn't sign it
+    names = desk.cert.extensions.get_extension_for_class(SubjectAlternativeName).value
+    assert names.get_values_for_type(DNSName) == ["localhost", "desk.localhost"]

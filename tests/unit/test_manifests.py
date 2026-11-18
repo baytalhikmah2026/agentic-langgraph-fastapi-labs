@@ -1,4 +1,4 @@
-"""The Kubernetes manifests (Labs 82-86): rules every workload in k8s/base follows."""
+"""The Kubernetes manifests (Labs 82-87): rules every workload in k8s/base follows."""
 
 import tomllib
 from pathlib import Path
@@ -101,3 +101,12 @@ def test_long_running_containers_have_probes() -> None:
         for container in workload["spec"]["template"]["spec"]["containers"]:
             assert "livenessProbe" in container, name
             assert name not in behind_a_service or "readinessProbe" in container, name
+
+
+def test_the_front_gate_only_speaks_https() -> None:
+    (ingress,) = [doc for doc in documents() if doc["kind"] == "Ingress"]
+    annotations = ingress["metadata"]["annotations"]
+
+    assert ingress["spec"]["ingressClassName"] == "traefik"
+    assert ingress["spec"]["tls"][0]["secretName"] == "desk-tls"
+    assert annotations["traefik.ingress.kubernetes.io/router.entrypoints"] == "websecure"

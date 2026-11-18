@@ -119,6 +119,13 @@ def save(issued: Issued, folder: Path, stem: str) -> None:
     (folder / f"{stem}.key").write_bytes(key)
 
 
+def load(folder: Path, stem: str) -> Issued:
+    """Read back a key and certificate written by save() (Lab 87: issue more from one CA)."""
+    key = serialization.load_pem_private_key((folder / f"{stem}.key").read_bytes(), password=None)
+    cert = x509.load_pem_x509_certificate((folder / f"{stem}.crt").read_bytes())
+    return Issued(key, cert)
+
+
 def server_context(ca_file: str, cert_file: str, key_file: str) -> ssl.SSLContext:
     """A server that asks every caller for a certificate signed by our CA."""
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=ca_file)
