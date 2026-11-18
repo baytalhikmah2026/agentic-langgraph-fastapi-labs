@@ -1,10 +1,14 @@
-# Qdrant (Lab 82): the semantic memory; Lab 85 gives it a real disk
+# Qdrant (Lab 85): a StatefulSet with its own disk; the semantic memory
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: qdrant
 spec:
+  serviceName: qdrant  # the headless Service below gives the pod a stable name: qdrant-0.qdrant
   replicas: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain  # deleting the StatefulSet keeps the disk, and the bank's data on it
+    whenScaled: Retain
   selector:
     matchLabels:
       app.kubernetes.io/name: qdrant
@@ -13,6 +17,8 @@ spec:
       labels:
         app.kubernetes.io/name: qdrant
     spec:
+      nodeSelector:
+        crescent-ledger.bank/residency: on-premises  # the bank's data stays on its own nodes
       containers:
         - name: qdrant
           image: qdrant/qdrant:v1.20.0
@@ -28,15 +34,22 @@ spec:
               memory: 256Mi
             limits:
               memory: 1Gi
-      volumes:
-        - name: data
-          emptyDir: {}  # lost when the pod goes; Lab 85 gives it a real disk
+  volumeClaimTemplates:  # one disk per pod, created once and reused after every restart
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: qdrant
 spec:
+  clusterIP: None  # headless: the name points straight at the pod
   selector:
     app.kubernetes.io/name: qdrant
   ports:

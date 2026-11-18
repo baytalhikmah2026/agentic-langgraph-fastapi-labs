@@ -1,4 +1,4 @@
-"""The Kubernetes manifests (Labs 82-84): rules every workload in k8s/base follows."""
+"""The Kubernetes manifests (Labs 82-85): rules every workload in k8s/base follows."""
 
 import tomllib
 from pathlib import Path
@@ -8,6 +8,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "k8s" / "base"
 SECRET_WORDS = ("PASSWORD", "SECRET", "TOKEN", "KEY")  # setting names that hint at a secret
+RESIDENCY = {"crescent-ledger.bank/residency": "on-premises"}  # Lab 85
 WORKLOADS = {"Deployment", "StatefulSet", "Job", "Rollout"}
 
 
@@ -70,3 +71,16 @@ def test_no_secret_is_written_in_the_plan() -> None:
             for variable in container.get("env", []):
                 if secret_like(variable["name"]):
                     assert "valueFrom" in variable or variable["value"].startswith("/")
+
+
+def test_data_services_keep_their_data_on_the_bank_node() -> None:
+    services = {doc["metadata"]["name"]: doc for doc in documents() if doc["kind"] == "Service"}
+    stateful = [workload for workload in workloads() if workload["kind"] == "StatefulSet"]
+
+    assert {item["metadata"]["name"] for item in stateful} == {"postgres", "redis", "qdrant"}
+    for workload in stateful:
+        spec = workload["spec"]
+        assert spec["volumeClaimTemplates"]  # its own disk
+        assert spec["persistentVolumeClaimRetentionPolicy"]["whenDeleted"] == "Retain"
+        assert spec["template"]["spec"]["nodeSelector"] == RESIDENCY
+        assert services[spec["serviceName"]]["spec"]["clusterIP"] == "None"  # headless

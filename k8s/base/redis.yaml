@@ -1,10 +1,14 @@
-# Redis (Lab 82): cache, rate limits and shared team state; Lab 85 turns it into a StatefulSet
+# Redis (Lab 85): a StatefulSet with its own disk; cache, rate limits, queue and team cases
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: redis
 spec:
+  serviceName: redis  # the headless Service below gives the pod a stable name: redis-0.redis
   replicas: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain  # deleting the StatefulSet keeps the disk, and the bank's data on it
+    whenScaled: Retain
   selector:
     matchLabels:
       app.kubernetes.io/name: redis
@@ -13,9 +17,12 @@ spec:
       labels:
         app.kubernetes.io/name: redis
     spec:
+      nodeSelector:
+        crescent-ledger.bank/residency: on-premises  # the bank's data stays on its own nodes
       containers:
         - name: redis
           image: redis:8.10.3
+          args: ["redis-server", "--appendonly", "yes"]  # write every change to disk
           ports:
             - name: redis
               containerPort: 6379
@@ -28,15 +35,22 @@ spec:
               memory: 128Mi
             limits:
               memory: 512Mi
-      volumes:
-        - name: data
-          emptyDir: {}  # lost when the pod goes; Lab 85 gives it a real disk
+  volumeClaimTemplates:  # one disk per pod, created once and reused after every restart
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: redis
 spec:
+  clusterIP: None  # headless: the name points straight at the pod
   selector:
     app.kubernetes.io/name: redis
   ports:
