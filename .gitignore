@@ -32,3 +32,7 @@ data/workspace/*
 
 # Lab certificates and their private keys (Lab 74): made on each computer, never committed
 ops/certs/
+
+# Lab 93: generated training data and model files (large, rebuilt from the scripts)
+edge/finetune/data/
+edge/finetune/*.gguf

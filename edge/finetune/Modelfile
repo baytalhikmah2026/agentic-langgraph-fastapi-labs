@@ -1,0 +1,3 @@
+# The fine-tuned router (Lab 93): Qwen3 1.7B with the desk's routing lesson, in one GGUF file
+FROM ./router.gguf
+PARAMETER temperature 0
