@@ -261,6 +261,27 @@ services:
               count: all
               capabilities: [gpu]
 
+  nim:
+    # Optional, NVIDIA GPU only (Lab 92): docker compose --profile nim up -d nim
+    # Needs an NGC API key in .env (NGC_API_KEY) and "docker login nvcr.io" first
+    image: nvcr.io/nim/meta/llama-3.1-8b-instruct:1.8.6
+    container_name: sb-nim
+    profiles: ["nim"]
+    environment:
+      NGC_API_KEY: $NGC_API_KEY
+    ports:
+      - "8002:8000"
+    volumes:
+      - nim-cache:/opt/nim/.cache
+    shm_size: 16gb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
 networks:
   sandbox-net:
     internal: true  # no route to the internet or the other services (Lab 47)
@@ -273,3 +294,4 @@ volumes:
   hf-cache:
   prometheus-data:
   grafana-data:
+  nim-cache:

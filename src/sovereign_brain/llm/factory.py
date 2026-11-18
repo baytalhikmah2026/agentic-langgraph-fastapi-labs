@@ -16,7 +16,7 @@ def get_chat_model(settings: Settings) -> BaseChatModel:
             base_url=settings.openai_base_url,
             api_key=settings.openai_api_key,
             temperature=settings.llm_temperature,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            extra_body=settings.openai_extra_body or None,  # Lab 92: set per server
         )
     return ChatOllama(
         model=settings.llm_model,

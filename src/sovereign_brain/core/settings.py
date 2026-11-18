@@ -6,7 +6,7 @@ by SB_SECRETS_DIR (a mounted Secret). Environment variables still win over those
 
 import os
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     openai_base_url: str = "http://localhost:11434/v1"
     openai_api_key: SecretStr = SecretStr("not-needed")
+    # Lab 92: extra fields sent with every OpenAI-compatible request. The default switches off
+    # Qwen3's "thinking" on vLLM; set SB_OPENAI_EXTRA_BODY={} for servers that don't know it (NIM)
+    openai_extra_body: dict[str, Any] = {"chat_template_kwargs": {"enable_thinking": False}}
 
     # Agent safety (Lab 13): the most steps one graph run may take
     graph_recursion_limit: int = 25
